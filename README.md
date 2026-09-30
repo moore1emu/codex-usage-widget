@@ -22,12 +22,16 @@ Percentages show **quota remaining**: 100% is full and 0% is exhausted. Credits 
 
 Drag to move or resize. Use **↻** to refresh, **◉ / ○** for always on top, **—** to minimize to the tray, and **×** to exit. Hidden buttons appear on hover. Double-click the tray icon to restore the window.
 
-Right-click the tray icon to choose sizes, colors, credit display, refresh interval, notifications, or a screen corner.
+## Settings
 
-## Notification settings
+Right-click the tray icon to open the settings menu. Choose **Notifications...** for low-quota warnings and the 5-hour reset alert. **0 disables a threshold.** Reset alerts require weekly quota above 0%.
 
-Choose **Notifications...** from the tray menu. Set a low-quota threshold, or enable the 5-hour reset alert. **0 disables a threshold.** Reset alerts require weekly quota above 0%.
-
-![Notification settings panel](docs/screenshots/notification-settings.png)
+| Settings menu | Notification settings |
+| --- | --- |
+| <img src="docs/screenshots/settings-menu.png" alt="Full widget settings menu" width="220"> | <img src="docs/screenshots/notification-settings.png" alt="Notification settings panel" width="361"> |
 
 Screenshots show captured usage and settings, not live values. Settings are saved locally on each computer.
+
+## Disclaimer
+
+Review and understand the scripts before running them. This is an unofficial community project and is not affiliated with, endorsed by, or supported by OpenAI or the Codex team. Use at your own discretion.

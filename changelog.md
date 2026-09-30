@@ -6,7 +6,7 @@
 
 - Simplified the README to quick setup, essential controls, and screenshots.
 - Moved the complete release history to `changelog.md` and the detailed guide to `extradetails.md`.
-- Retained the notification settings screenshot in the README. Widget behavior and version remain unchanged.
+- Added the full settings-menu screenshot alongside the notification panel and a review-before-use/non-endorsement disclaimer. Widget behavior and version remain unchanged.
 
 ## 1.7.2 — September 30, 2026
 
