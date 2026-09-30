@@ -1,0 +1,27 @@
+# Shortcuts contain paths for the computer where they were generated.
+*.lnk
+
+# Keep runtime settings, diagnostics, and captured usage out of the repository.
+widget-state.json
+warning-state.json
+startup-error.log
+*.log
+usage.json
+usage-response*.json
+
+# Never publish local credentials or Codex account caches.
+.env
+.env.*
+!.env.example
+auth.json
+credentials.json
+.codex/
+
+# Keep editor files, backups, and scratch work local.
+.vscode/
+.idea/
+work/
+*.bak
+*.tmp
+Thumbs.db
+Desktop.ini
