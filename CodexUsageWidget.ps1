@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '1.8.0'
+$script:WidgetVersion = '2.0.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -126,6 +126,10 @@ foreach ($key in @($script:AlertStates.Keys)) {
 }
 # Show positive or unlimited credits by default, regardless of subscription usage.
 $script:CreditDisplayMode = 'Available'
+# Load the v2 sharing, account rendering, and unified native settings helpers.
+foreach ($helper in @('WidgetSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1')) {
+    . (Join-Path $script:WidgetDirectory $helper)
+}
 
 [xml] $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -320,7 +324,7 @@ function New-TrayUsageIcon {
         # Use the selected quota colors in the live notification icon.
         $blueBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:PrimaryColor))
         $purpleBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:SecondaryColor))
-        # Keep a credit-colored identity accent and a visible boundary even at zero quota.
+        # Prepare the optional credit stripe and a boundary visible even at zero quota.
         $creditBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:CreditColor))
         $outlinePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(235,245,247,251), 1)
         try {
@@ -331,8 +335,12 @@ function New-TrayUsageIcon {
             $purpleWidth = [int] [Math]::Round(28 * ([Math]::Min(100, [Math]::Max(0, $SecondaryRemaining)) / 100))
             if ($blueWidth -gt 0) { $graphics.FillRectangle($blueBrush, 2, 4, $blueWidth, 6) }
             if ($purpleWidth -gt 0) { $graphics.FillRectangle($purpleBrush, 2, 14, $purpleWidth, 6) }
-            # The green accent identifies credits; it is not a credit-usage percentage.
-            $graphics.FillRectangle($creditBrush, 4, 25, 24, 3)
+            # Show the credit identity accent only for enabled positive or unlimited credits.
+            $creditValue = [decimal]0
+            $positiveCredits = [decimal]::TryParse([string]$script:Usage.credits.balance, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$creditValue) -and $creditValue -gt 0
+            if ($script:CreditDisplayMode -ne 'Off' -and ($positiveCredits -or $script:Usage.credits.unlimited -eq $true)) {
+                $graphics.FillRectangle($creditBrush, 4, 25, 24, 3)
+            }
             $graphics.DrawRectangle($outlinePen, 1, 1, 29, 29)
         }
         finally {
@@ -448,43 +456,8 @@ $versionItem.Enabled = $false
 [void]$trayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
 $trayOpenItem = $trayMenu.Items.Add('Open Codex Usage')
 $trayRefreshItem = $trayMenu.Items.Add('Refresh')
-$trayIntervalMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Refresh interval')
-[void] $trayMenu.Items.Add($trayIntervalMenu)
-$script:IntervalMenuItems = @()
-foreach ($intervalOption in @(
-    @{ Label = '1 minute'; Minutes = 1 },
-    @{ Label = '5 minutes'; Minutes = 5 },
-    @{ Label = '15 minutes'; Minutes = 15 },
-    @{ Label = '30 minutes'; Minutes = 30 },
-    @{ Label = 'Manual only'; Minutes = 0 }
-)) {
-    $intervalItem = [System.Windows.Forms.ToolStripMenuItem]::new([string] $intervalOption.Label)
-    $intervalItem.Tag = [int] $intervalOption.Minutes
-    [void] $trayIntervalMenu.DropDownItems.Add($intervalItem)
-    $script:IntervalMenuItems += $intervalItem
-}
-[void] $trayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
-# Put separate color pickers beside the existing notification-area settings.
-$trayColorsMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Colors')
-[void] $trayMenu.Items.Add($trayColorsMenu)
-$primaryColorItem = $trayColorsMenu.DropDownItems.Add('5-hour color...')
-$secondaryColorItem = $trayColorsMenu.DropDownItems.Add('Weekly color...')
-$creditColorItem = $trayColorsMenu.DropDownItems.Add('Credits color...')
-$resetColorsItem = $trayColorsMenu.DropDownItems.Add('Reset to default colors')
-# Open a small settings dialog for independent low-quota warning thresholds.
-$alertSettingsItem = $trayMenu.Items.Add('Notifications...')
-# Keep reset appearance independent from reset alert settings.
-$resetDisplayItem = $trayMenu.Items.Add('Reset display...')
-# Configure credit visibility without changing usage tracking.
-$creditsMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Credit display')
-[void]$trayMenu.Items.Add($creditsMenu)
-$script:CreditMenuItems = @()
-# Let the user choose automatic availability, always visible, or hidden credits.
-foreach ($option in @(@{ Label = 'When credits exist'; Mode = 'Available' }, @{ Label = 'Always show'; Mode = 'Always' }, @{ Label = 'Off'; Mode = 'Off' })) {
-    $item = $creditsMenu.DropDownItems.Add($option.Label)
-    $item.Tag = $option.Mode
-    $script:CreditMenuItems += $item
-}
+# Open the four-tab settings window from the tray.
+$settingsItem = $trayMenu.Items.Add('Settings...')
 # Provide predictable window sizes without requiring manual dragging.
 $sizeMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Window size')
 [void]$trayMenu.Items.Add($sizeMenu)
@@ -496,14 +469,12 @@ foreach ($preset in @(
     @{ Name = 'Large / Default'; Width = 280; Height = 290 }
 )) {
     # Store dimensions on each menu item instead of capturing the loop variable.
-    $item = $sizeMenu.DropDownItems.Add(('{0} ({1} x {2})' -f $preset.Name,$preset.Width,$preset.Height))
+    # Layout-specific dimensions are applied when the preset is selected.
+    $item = $sizeMenu.DropDownItems.Add($preset.Name)
     $item.Tag = $preset
     $item.Add_Click({
         param($sender,$eventArgs)
-        $window.Width = $sender.Tag.Width
-        $window.Height = $sender.Tag.Height
-        Update-ResponsiveLayout
-        Save-WidgetState
+        Set-WidgetPreset $sender.Tag.Name
     })
 }
 # Place the current size in a monitor corner without resizing or changing topmost state.
@@ -616,34 +587,9 @@ function Update-QuotaColors {
     if ($previous) { $previous.Dispose() }
 }
 
-function Select-QuotaColor {
-    param([ValidateSet('Primary', 'Secondary', 'Credits')] [string] $Quota)
-    # Start the Windows color picker at this quota's current color.
-    $dialog = [System.Windows.Forms.ColorDialog]::new()
-    $dialog.FullOpen = $true
-    $current = if ($Quota -eq 'Primary') { $script:PrimaryColor } elseif ($Quota -eq 'Secondary') { $script:SecondaryColor } else { $script:CreditColor }
-    $dialog.Color = [System.Drawing.ColorTranslator]::FromHtml($current)
-    try {
-        # Only change the widget when the user accepts a color.
-        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            $selected = '#{0:X2}{1:X2}{2:X2}' -f $dialog.Color.R, $dialog.Color.G, $dialog.Color.B
-            if ($Quota -eq 'Primary') { $script:PrimaryColor = $selected }
-            elseif ($Quota -eq 'Secondary') { $script:SecondaryColor = $selected }
-            else { $script:CreditColor = $selected }
-            Update-QuotaColors
-        }
-    }
-    finally {
-        # Release the native picker after confirmation or cancellation.
-        $dialog.Dispose()
-    }
-}
 
-function Update-RefreshIntervalMenu {
-    foreach ($item in $script:IntervalMenuItems) {
-        $item.Checked = ([int] $item.Tag -eq $script:RefreshIntervalMinutes)
-    }
-}
+
+
 
 function Get-PrimaryResetNotification {
     # Disabling the option clears its baseline so enabling it later cannot send an old reset.
@@ -739,145 +685,15 @@ function Save-WarningState {
     }
 }
 
-function Show-AlertSettings {
-    # Create a fixed-size Windows settings dialog with one threshold per quota.
-    $dialog = [System.Windows.Forms.Form]::new()
-    $dialog.Text = 'Notifications'
-    $dialog.ClientSize = [System.Drawing.Size]::new(345, 225)
-    $dialog.FormBorderStyle = 'FixedDialog'
-    $dialog.StartPosition = 'CenterScreen'
-    $dialog.MaximizeBox = $false
-    $dialog.MinimizeBox = $false
-    $dialog.TopMost = $true
-    try {
-        # Explain that thresholds refer to remaining quota and zero disables a warning.
-        $help = [System.Windows.Forms.Label]::new()
-        $help.Text = 'Warn when usage left falls below the chosen %.' + [Environment]::NewLine + '0 = off. Checked whenever usage refreshes.'
-        $help.SetBounds(15, 12, 315, 40)
-        $dialog.Controls.Add($help)
-        # Keep independent numeric inputs bounded to meaningful percentages.
-        $inputs = @()
-        $row = 0
-        foreach ($setting in @(
-            @{ Label = '5-hour threshold (%)'; Value = $script:PrimaryAlertThreshold },
-            @{ Label = 'Weekly threshold (%)'; Value = $script:SecondaryAlertThreshold }
-        )) {
-            $label = [System.Windows.Forms.Label]::new()
-            $label.Text = $setting.Label
-            $label.SetBounds(15, 63 + 35 * $row, 210, 24)
-            $dialog.Controls.Add($label)
-            $input = [System.Windows.Forms.NumericUpDown]::new()
-            $input.Minimum = 0
-            $input.Maximum = 100
-            $input.Value = $setting.Value
-            $input.SetBounds(240, 60 + 35 * $row, 85, 24)
-            $dialog.Controls.Add($input)
-            $inputs += $input
-            $row++
-        }
-        # Offer reset notifications independently of either low-usage threshold.
-        $resetNotice = [System.Windows.Forms.CheckBox]::new()
-        $resetNotice.Text = 'Notify when the 5-hour window resets'
-        $resetNotice.Checked = $script:NotifyPrimaryReset
-        $resetNotice.SetBounds(15, 135, 315, 25)
-        $dialog.Controls.Add($resetNotice)
-        # Commit notification preferences together; Cancel leaves them unchanged.
-        $save = [System.Windows.Forms.Button]::new()
-        $save.Text = 'Save'
-        $save.DialogResult = 'OK'
-        $save.SetBounds(155, 180, 80, 28)
-        $cancel = [System.Windows.Forms.Button]::new()
-        $cancel.Text = 'Cancel'
-        $cancel.DialogResult = 'Cancel'
-        $cancel.SetBounds(245, 180, 80, 28)
-        $dialog.Controls.Add($save)
-        $dialog.Controls.Add($cancel)
-        $dialog.AcceptButton = $save
-        $dialog.CancelButton = $cancel
-        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            $script:PrimaryAlertThreshold = [int]$inputs[0].Value
-            $script:SecondaryAlertThreshold = [int]$inputs[1].Value
-            # Re-enabling starts from a new observation, while unchanged settings preserve suppression.
-            if ($script:NotifyPrimaryReset -ne $resetNotice.Checked) { $script:AlertStates.Remove('primaryReset') }
-            $script:NotifyPrimaryReset = $resetNotice.Checked
-            Save-WarningState
-            Save-WidgetState
-            # Reevaluate new thresholds on the next successful fresh account response.
-            # Preserve already-sent warnings when settings are saved again.
-            Start-UsageRefresh
-        }
-    }
-    finally {
-        # Dispose the dialog and its child controls after either action.
-        $dialog.Dispose()
-    }
-}
 
-function Show-ResetDisplaySettings {
-    # Use native Windows controls and the same system theme as the other settings.
-    $dialog = [System.Windows.Forms.Form]::new()
-    $dialog.Text = 'Reset display'
-    $dialog.ClientSize = [System.Drawing.Size]::new(365, 220)
-    $dialog.FormBorderStyle = 'FixedDialog'
-    $dialog.StartPosition = 'CenterScreen'
-    $dialog.MaximizeBox = $false
-    $dialog.MinimizeBox = $false
-    $dialog.TopMost = $true
-    try {
-        # Explain the difference between the reported next reset and later estimates.
-        $help = [System.Windows.Forms.Label]::new()
-        $help.Text = "Show upcoming 5-hour times within this many hours.`nLater times are estimates; usage refreshes correct them."
-        $help.SetBounds(15, 12, 335, 42)
-        $dialog.Controls.Add($help)
-        # Bound the look-ahead to one week and use zero as the independent off setting.
-        $label = [System.Windows.Forms.Label]::new()
-        $label.Text = '5-hour times: hours ahead (0 = off)'
-        $label.SetBounds(15, 65, 250, 24)
-        $dialog.Controls.Add($label)
-        $hours = [System.Windows.Forms.NumericUpDown]::new()
-        $hours.Minimum = 0
-        $hours.Maximum = 168
-        $hours.Value = $script:PrimaryResetHours
-        $hours.SetBounds(275, 62, 75, 24)
-        $dialog.Controls.Add($hours)
-        # Let the weekly date remain enabled even when five-hour times are disabled.
-        $weekly = [System.Windows.Forms.CheckBox]::new()
-        $weekly.Text = 'Show weekly reset day, date, and time'
-        $weekly.Checked = $script:ShowWeeklyResetDate
-        $weekly.SetBounds(15, 108, 335, 26)
-        $dialog.Controls.Add($weekly)
-        # Save only after the user accepts; Cancel leaves existing preferences intact.
-        $save = [System.Windows.Forms.Button]::new()
-        $save.Text = 'Save'
-        $save.DialogResult = 'OK'
-        $save.SetBounds(180, 172, 80, 28)
-        $cancel = [System.Windows.Forms.Button]::new()
-        $cancel.Text = 'Cancel'
-        $cancel.DialogResult = 'Cancel'
-        $cancel.SetBounds(270, 172, 80, 28)
-        $dialog.Controls.Add($save)
-        $dialog.Controls.Add($cancel)
-        $dialog.AcceptButton = $save
-        $dialog.CancelButton = $cancel
-        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            # Apply display preferences immediately without changing refresh or alert behavior.
-            $script:PrimaryResetHours = [int]$hours.Value
-            $script:ShowWeeklyResetDate = $weekly.Checked
-            Save-WidgetState
-            Update-Display
-        }
-    }
-    finally {
-        # Dispose every native child control with its owning dialog.
-        $dialog.Dispose()
-    }
-}
+
+
 
 function Set-RefreshInterval {
     param([int] $Minutes)
     if ($Minutes -notin @(0, 1, 5, 15, 30)) { return }
     $script:RefreshIntervalMinutes = $Minutes
-    Update-RefreshIntervalMenu
+
 
     if ($script:RefreshTimer) {
         $script:RefreshTimer.Stop()
@@ -911,6 +727,19 @@ function Save-WidgetState {
         primaryResetHours = $script:PrimaryResetHours
         showWeeklyResetDate = $script:ShowWeeklyResetDate
         creditDisplayMode = $script:CreditDisplayMode
+        # Keep file connections and aliases on this computer, outside the synchronized project.
+        writeUsageEnabled = $script:WriteUsageEnabled
+        readUsageEnabled = $script:ReadUsageEnabled
+        usageOutputPath = $script:UsageOutputPath
+        usageInputPath = $script:UsageInputPath
+        localDisplayName = $script:LocalDisplayName
+        sharingSourceId = $script:SharingSourceId
+        writeIntervalMinutes = $script:WriteIntervalMinutes
+        readIntervalMinutes = $script:ReadIntervalMinutes
+        accountLayout = $script:AccountLayout
+        selectedAccount = $script:SelectedAccount
+        localScheme = $script:LocalScheme
+        remoteScheme = $script:RemoteScheme
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath $script:StatePath -Encoding utf8
 }
 
@@ -933,6 +762,11 @@ function Update-PinDisplay {
 
 function Update-HoverControls {
     param([bool] $IsPointerOver = $outerBorder.IsMouseOver)
+    # Account cards share the parent toolbar and must not create competing hover buttons.
+    if ($script:RenderingAccountCard) {
+        foreach ($control in @($compactRefreshButton,$hoverCloseButton,$hoverPinButton,$hoverMinimizeButton,$hoverRefreshButton)) { $control.Visibility = 'Collapsed' }
+        return
+    }
     # Reveal missing header controls only while the pointer is over the widget.
     $showClose = $IsPointerOver -and $dragArea.Visibility -ne 'Visible'
     $hoverCloseButton.Visibility = if ($showClose) { 'Visible' } else { 'Collapsed' }
@@ -1023,7 +857,7 @@ function Update-ResponsiveLayout {
             $numberSize--
         }
         # Keep refresh above the numeric badge until even its numeric rows leave no room.
-        $refreshHeight = if ($numericHeight + 34 -le $window.ActualHeight) { 20 } else { 0 }
+        $refreshHeight = if (-not $script:RenderingAccountCard -and $numericHeight + 34 -le $window.ActualHeight) { 20 } else { 0 }
         $compactRefreshButton.Visibility = if ($refreshHeight) { 'Visible' } else { 'Collapsed' }
         $ultraCompactPanel.Margin = [System.Windows.Thickness]::new(0,$refreshHeight,0,0)
         # Measure actual text so countdowns remain visible for as long as they fit.
@@ -1053,9 +887,18 @@ function Update-ResponsiveLayout {
         $compactSecondaryReset.Visibility = if ($showResets) { 'Visible' } else { 'Collapsed' }
         # Refresh hover controls after resizing without moving the numeric layout.
         Update-HoverControls
+        if (-not $script:RenderingAccountCard) { Update-AccountViews }
         return
     }
 
+    # Account cards use the shared parent toolbar, leaving their space to usage and reset details.
+    if ($script:RenderingAccountCard) {
+        $dragArea.Visibility = 'Collapsed'
+        $footerArea.Visibility = 'Collapsed'
+        $outerBorder.Padding = [Windows.Thickness]::new(6)
+        Update-HoverControls
+        return
+    }
     # Measure header controls separately, adding them only after the data rows fit.
     # Fit the full title before abbreviating it; the plan line has its own fit check.
     $planText.Visibility = 'Collapsed'
@@ -1096,6 +939,7 @@ function Update-ResponsiveLayout {
     $padding = if ($window.ActualHeight -ge ($usedHeight + 22) -and $window.ActualWidth -ge ([Math]::Max($requiredWidth, $headerWidth) + 22)) { 10 } else { 6 }
     $outerBorder.Padding = [System.Windows.Thickness]::new($padding)
     Update-HoverControls
+    Update-AccountViews
 }
 
 function Update-TrayIcon {
@@ -1115,7 +959,12 @@ function Update-TrayIcon {
     # Distinguish unknown or stale readings from genuine zero quota.
     $primaryLabel = if ($primaryKnown) { '{0:N0}% left' -f $primaryValue } else { 'unavailable' }
     $secondaryLabel = if ($secondaryKnown) { '{0:N0}% left' -f $secondaryValue } else { 'unavailable' }
-    $trayIcon.Text = if ($script:RefreshError) { 'Codex · Refresh failed · readings may be stale' } else { "Codex · 5-hour $primaryLabel · Weekly $secondaryLabel" }
+    # Include available credits while respecting the same display setting as the widget.
+    $creditLabel = Get-CreditLabel
+    $showCreditText = $script:CreditDisplayMode -ne 'Off' -and $creditLabel -notmatch 'unavailable|none|^Credits: 0$'
+    $tooltip = "Codex · 5h $primaryLabel · Wk $secondaryLabel" + $(if ($showCreditText) { ' · ' + $creditLabel } else { '' })
+    if ($script:RefreshError) { $tooltip = 'Stale · ' + $tooltip }
+    $trayIcon.Text = $tooltip.Substring(0,[Math]::Min(127,$tooltip.Length))
 }
 
 function Format-ResetCountdown {
@@ -1231,7 +1080,7 @@ function Update-ResetLabels {
 
 function Update-Display {
     # Wait for the first account snapshot before updating the display.
-    if (-not $script:Usage) { Update-RefreshStatus; return }
+    if (-not $script:Usage) { Update-ResponsiveLayout; Update-RefreshStatus; return }
     # Read both quota windows from the unchanged usage response.
     $primary = $script:Usage.primary
     $secondary = $script:Usage.secondary
@@ -1333,6 +1182,8 @@ function Get-CreditLabel {
 }
 
 function Start-UsageRefresh {
+    # A matched input check follows each widget refresh, including manual-only operation.
+    if ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -eq -1) { Read-SharedUsage }
     # Let the poller collect or time out the current request before starting another one.
     if ($script:RefreshProcess) { return }
 
@@ -1411,6 +1262,9 @@ function Complete-UsageRefresh {
         Update-TrayIcon
         # Check configured warning thresholds only after receiving fresh account data.
         Show-UsageWarnings
+        # Matching writes immediately; explicit file intervals keep their own publishing cadence.
+        if ($script:WriteIntervalMinutes -eq -1 -or $script:PublishOnRefresh) { Write-SharedUsage -Force }
+        $script:PublishOnRefresh = $false
     }
     catch {
         Set-RefreshFailure -Message $_.Exception.Message
@@ -1453,6 +1307,26 @@ if (Test-Path -LiteralPath $script:StatePath) {
         # Keep the automatic credit display preference across launches.
         # Older settings adopt the new available-credit default.
         if ($state.creditDisplayMode -in @('Available', 'Always', 'Off')) { $script:CreditDisplayMode = $state.creditDisplayMode }
+        # Migrate older preferences to safe v2 defaults; JSON sharing starts disabled unless saved.
+        foreach ($key in @('writeUsageEnabled','readUsageEnabled')) {
+            if ($state.$key -is [bool]) { Set-Variable -Scope Script -Name $key -Value $state.$key }
+        }
+        foreach ($key in @('usageOutputPath','usageInputPath')) {
+            if ($state.$key -is [string]) { Set-Variable -Scope Script -Name $key -Value $state.$key }
+        }
+        # Bound the cleaned nickname rather than the original text containing control characters.
+        if ($state.localDisplayName -is [string] -and $state.localDisplayName.Trim()) {
+            $savedName = ($state.localDisplayName -replace '[\p{C}]','').Trim()
+            if ($savedName) { $script:LocalDisplayName = $savedName.Substring(0,[Math]::Min(40,$savedName.Length)) }
+        }
+        if ($state.sharingSourceId -match '^[0-9a-f]{32}$') { $script:SharingSourceId = $state.sharingSourceId }
+        foreach ($key in @('writeIntervalMinutes','readIntervalMinutes')) {
+            if (($state.$key -is [long] -or $state.$key -is [int]) -and $state.$key -in @(-1,0,1,5,15,30)) { Set-Variable -Scope Script -Name $key -Value ([int]$state.$key) }
+        }
+        if ($state.accountLayout -in @('Side by side','Stacked','Account picker')) { $script:AccountLayout = $state.accountLayout }
+        if ($state.selectedAccount -in @('Local','Remote')) { $script:SelectedAccount = $state.selectedAccount }
+        if ($state.localScheme -and $script:ColorSchemes.Contains([string]$state.localScheme)) { $script:LocalScheme = $state.localScheme }
+        if ($state.remoteScheme -and $script:ColorSchemes.Contains([string]$state.remoteScheme)) { $script:RemoteScheme = $state.remoteScheme }
         if ($null -ne $state.left -and $null -ne $state.top) {
             $window.WindowStartupLocation = 'Manual'
             $window.Left = [double] $state.left
@@ -1475,6 +1349,9 @@ if (Test-Path -LiteralPath $script:StatePath) {
 else {
     $window.WindowStartupLocation = 'CenterScreen'
 }
+# Apply a coordinated palette and create the optional peer views after restoring local preferences.
+Set-AccountScheme $script:LocalScheme
+Initialize-AccountViews
 
 $dragArea.Add_MouseLeftButtonDown({
     if ($_.ChangedButton -eq [System.Windows.Input.MouseButton]::Left -and
@@ -1491,9 +1368,7 @@ $outerBorder.Add_MouseLeftButtonDown({
 $ultraCompactPanel.Add_MouseLeftButtonDown({
     if ($_.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
         if ($_.ClickCount -eq 2) {
-            $window.Width = 280
-            $window.Height = 290
-            Update-ResponsiveLayout
+            Set-WidgetPreset 'Large / Default'
         }
         elseif ($window.WindowState -eq [System.Windows.WindowState]::Normal) {
             Start-WidgetDrag
@@ -1512,10 +1387,10 @@ $outerBorder.Add_MouseLeftButtonUp({
 })
 # Losing capture must never leave the window following later pointer movements.
 $outerBorder.Add_LostMouseCapture({ $script:DragOrigin = $null })
-$refreshButton.Add_Click({ Start-UsageRefresh })
+$refreshButton.Add_Click({ Invoke-WidgetRefresh })
 # The compact refresh button uses the same asynchronous account refresh.
-$compactRefreshButton.Add_Click({ Start-UsageRefresh })
-$hoverRefreshButton.Add_Click({ Start-UsageRefresh })
+$compactRefreshButton.Add_Click({ Invoke-WidgetRefresh })
+$hoverRefreshButton.Add_Click({ Invoke-WidgetRefresh })
 $pinButton.Add_Click({
     $window.Topmost = -not $window.Topmost
     Update-PinDisplay
@@ -1538,42 +1413,15 @@ $window.Add_StateChanged({
 })
 $trayIcon.Add_DoubleClick({ Show-Widget })
 $trayOpenItem.Add_Click({ Show-Widget })
-$trayRefreshItem.Add_Click({ Start-UsageRefresh })
-# Open independent color pickers from the tray menu.
-$primaryColorItem.Add_Click({ Select-QuotaColor -Quota Primary })
-$secondaryColorItem.Add_Click({ Select-QuotaColor -Quota Secondary })
-$creditColorItem.Add_Click({ Select-QuotaColor -Quota Credits })
-# Open the threshold settings from the notification-area menu.
-$alertSettingsItem.Add_Click({ Show-AlertSettings })
-# Change the independent reset display preferences from the tray menu.
-$resetDisplayItem.Add_Click({ Show-ResetDisplaySettings })
-# Update the optional credit labels immediately when the user toggles them.
-foreach ($item in $script:CreditMenuItems) {
-    $item.Add_Click({
-        param($sender, $eventArgs)
-        # Select one display mode and update its menu checkmark immediately.
-        $script:CreditDisplayMode = [string]$sender.Tag
-        foreach ($entry in $script:CreditMenuItems) { $entry.Checked = $entry.Tag -eq $script:CreditDisplayMode }
-        Update-Display
-    })
-}
-$resetColorsItem.Add_Click({
-    # Restore both original colors together when requested.
-    $script:PrimaryColor = '#669CFF'
-    $script:SecondaryColor = '#A97BFF'
-    $script:CreditColor = '#91B8B0'
-    Update-QuotaColors
-})
-foreach ($intervalItem in $script:IntervalMenuItems) {
-    $intervalItem.Add_Click({
-        param($sender, $eventArgs)
-        Set-RefreshInterval -Minutes ([int] $sender.Tag)
-    })
-}
+$trayRefreshItem.Add_Click({ Invoke-WidgetRefresh })
+# Apply settings through one native dialog instead of several competing menus.
+$settingsItem.Add_Click({ Show-WidgetSettings })
 $trayExitItem.Add_Click({ $window.Close() })
 $window.Add_Closing({
     # Use the same settings writer as preset sizes and refresh interval changes.
     Save-WidgetState
+    # Stop file polling before disposing the window and tray controls.
+    if ($script:SharingTimer) { $script:SharingTimer.Stop() }
     if ($script:RefreshProcess -and -not $script:RefreshProcess.HasExited) {
         $script:RefreshProcess.Kill($true)
     }
@@ -1606,15 +1454,19 @@ $window.Add_IsVisibleChanged({
 $script:RefreshTimer = [Windows.Threading.DispatcherTimer]::new()
 $script:RefreshTimer.Add_Tick({ Start-UsageRefresh })
 Set-RefreshInterval -Minutes $script:RefreshIntervalMinutes
+# Independent file timers remain active in the tray but do no work when sharing is disabled.
+$script:SharingTimer = [Windows.Threading.DispatcherTimer]::new()
+$script:SharingTimer.Interval = [TimeSpan]::FromSeconds(5)
+$script:SharingTimer.Add_Tick({ Invoke-SharingTick })
+Update-SharingTimer
 
 $window.Add_ContentRendered({
     # Apply restored colors once all controls and icons are initialized.
     Update-QuotaColors
-    # Reflect the saved credit display preference in the tray menu.
-    foreach ($entry in $script:CreditMenuItems) { $entry.Checked = $entry.Tag -eq $script:CreditDisplayMode }
     Update-PinDisplay
-    Update-RefreshIntervalMenu
+
     Update-ResponsiveLayout
+    Read-SharedUsage
     Start-UsageRefresh
 })
 # End the event loop only on explicit close; hiding to the tray must keep timers and menus alive.

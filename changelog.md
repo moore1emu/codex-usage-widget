@@ -2,6 +2,15 @@
 
 [Back to README](README.md)
 
+## 2.0.0 — October 1, 2026
+
+- Reorganized settings into General, Display, Sharing, and Notifications tabs with native system light/dark styling.
+- Added opt-in private JSON publishing and reading for another computer's Codex account. Each direction can match widget refresh, use an independent timer, or refresh manually. Separate file-operation status and source age make stale readings visible.
+- Added Side by side, Stacked, and Account picker layouts with per-layout sizes. Side by side retains both numeric columns and its divider at Mini size; account data is never combined.
+- Added six coordinated color palettes, with separate local and remote choices, replacing individual color pickers.
+- Validate shared snapshots, preserve the last good reading during missing/partial/older sync copies, and refuse to overwrite another source's JSON. Shared files contain usage data and a random source identifier, never authentication credentials.
+- Kept tray readings and notifications tied to the local account. Hide the tray credit accent when credit display is Off or the balance is zero/unavailable, and include available credits in the tray tooltip.
+- Updated documentation and screenshots. Existing window bounds, refresh and notification preferences remain; older custom colors migrate to the blue/purple/sage preset.
 ## 1.8.0 — October 1, 2026
 
 - Added **Reset display...** with independently saved 5-hour hours-ahead (default 25; 0 = off; maximum 168) and weekly date (default on) settings.
