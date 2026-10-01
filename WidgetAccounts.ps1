@@ -45,7 +45,7 @@ function Initialize-AccountViews {
     $script:AccountPicker = [Windows.Controls.ComboBox]::new()
     $script:AccountPicker.Height = 23
     $script:AccountPicker.Margin = [Windows.Thickness]::new(6,2,6,4)
-    foreach ($label in @('This computer','Other computer')) { $script:AccountPicker.Items.Add($label) | Out-Null }
+    foreach ($label in @('This computer','Shared computer')) { $script:AccountPicker.Items.Add($label) | Out-Null }
     $script:AccountPicker.SelectedIndex = if ($script:SelectedAccount -eq 'Remote') { 1 } else { 0 }
     $script:AccountPicker.Add_SelectionChanged({
         # Save the source choice separately from the local account used for notifications.

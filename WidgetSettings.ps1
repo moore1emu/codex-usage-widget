@@ -45,6 +45,21 @@ function Add-SettingsNote {
     return $label
 }
 
+function Set-SettingsHelp {
+    param($ToolTip, $Control, [string] $Text)
+    # Attach help to both the input and its internal native controls, such as numeric editors.
+    $ToolTip.SetToolTip($Control,$Text)
+    foreach ($child in $Control.Controls) { $ToolTip.SetToolTip($child,$Text) }
+    # Let users hover over the row label as well as the setting itself.
+    $table = $Control.Parent
+    if ($table -is [Windows.Forms.TableLayoutPanel]) {
+        $row = $table.GetPositionFromControl($Control).Row
+        foreach ($caption in $table.Controls) {
+            $position = $table.GetPositionFromControl($caption)
+            if ($position.Row -eq $row -and $position.Column -eq 0) { $ToolTip.SetToolTip($caption,$Text) }
+        }
+    }
+}
 function Show-WidgetSettings {
     # Keep all settings in one native Windows dialog that follows the system app theme.
     $dialog = [Windows.Forms.Form]::new()
@@ -55,6 +70,12 @@ function Show-WidgetSettings {
     $dialog.MaximizeBox = $false
     $dialog.MinimizeBox = $false
     $dialog.TopMost = $true
+    # Keep explanatory text available on hover without reserving full rows in the dialog.
+    $settingsToolTip = [Windows.Forms.ToolTip]::new()
+    $settingsToolTip.InitialDelay = 500
+    $settingsToolTip.ReshowDelay = 100
+    $settingsToolTip.AutoPopDelay = 20000
+    $settingsToolTip.ShowAlways = $true
     $tabs = [Windows.Forms.TabControl]::new()
     $tabs.Dock = 'Fill'
     $tables = @{}
@@ -81,7 +102,6 @@ function Show-WidgetSettings {
     $widgetChoices = @('Every 1 minute','Every 5 minutes','Every 15 minutes','Every 30 minutes','Manual only')
     $controls.Refresh = New-SettingsChoice $widgetChoices $widgetChoices[@(1,5,15,30,0).IndexOf($script:RefreshIntervalMinutes)]
     Add-SettingsRow $tables.General 'Widget refresh' $controls.Refresh
-    [void](Add-SettingsNote $tables.General 'Checks this computer''s Codex account. File timers use the latest available reading.')
     # Restore startup and window choices without applying them until Save.
     foreach ($entry in @(@{Key='Startup';Text='Launch at Windows sign-in';Value=(Get-LaunchAtSignIn)},@{Key='Topmost';Text='Keep widget on top';Value=$window.Topmost})) {
         $check = [Windows.Forms.CheckBox]::new()
@@ -105,20 +125,18 @@ function Show-WidgetSettings {
     # Keep second-account layout and palette controls beside their shared-file connections.
     $controls.Layout = New-SettingsChoice @('Side by side','Stacked','Account picker') $script:AccountLayout
     Add-SettingsRow $tables.Shared 'Account layout' $controls.Layout
-    $controls.Account = New-SettingsChoice @('This computer','Other computer') $(if ($script:SelectedAccount -eq 'Remote') { 'Other computer' } else { 'This computer' })
+    $controls.Account = New-SettingsChoice @('This computer','Shared computer') $(if ($script:SelectedAccount -eq 'Remote') { 'Shared computer' } else { 'This computer' })
     Add-SettingsRow $tables.Shared 'Picker account' $controls.Account
-    [void](Add-SettingsNote $tables.Shared 'Use independent settings for the second account. File connections are below. Side by side keeps two numeric columns at Mini size.')
     $controls.LocalScheme = New-SettingsChoice @($script:ColorSchemes.Keys) $script:LocalScheme
     $controls.RemoteScheme = New-SettingsChoice @($script:ColorSchemes.Keys) $script:RemoteScheme
     Add-SettingsRow $tables.General 'This computer''s colors' $controls.LocalScheme
-    Add-SettingsRow $tables.Shared 'Other computer''s colors' $controls.RemoteScheme
+    Add-SettingsRow $tables.Shared 'Shared computer''s colors' $controls.RemoteScheme
     $controls.Credits = New-SettingsChoice @('When credits exist','Always show','Off') @{'Available'='When credits exist';'Always'='Always show';'Off'='Off'}[$script:CreditDisplayMode]
     Add-SettingsRow $tables.General 'Credit display' $controls.Credits
     $controls.ResetHours = [Windows.Forms.NumericUpDown]::new()
     $controls.ResetHours.Maximum = 168
     $controls.ResetHours.Value = $script:PrimaryResetHours
     Add-SettingsRow $tables.General '5-hour times: hours ahead' $controls.ResetHours
-    [void](Add-SettingsNote $tables.General '0 = off. Later reset times are estimates assuming immediate reuse.')
     $controls.WeeklyDate = [Windows.Forms.CheckBox]::new()
     $controls.WeeklyDate.Text = 'Show weekly reset date and time'
     $controls.WeeklyDate.AutoSize = $true
@@ -131,13 +149,11 @@ function Show-WidgetSettings {
     $controls.SharedResetHours.Maximum = 168
     $controls.SharedResetHours.Value = $script:SharedPrimaryResetHours
     Add-SettingsRow $tables.Shared '5-hour times: hours ahead' $controls.SharedResetHours
-    [void](Add-SettingsNote $tables.Shared '0 = off. Later reset times are estimates assuming immediate reuse.')
     $controls.SharedWeeklyDate = [Windows.Forms.CheckBox]::new()
     $controls.SharedWeeklyDate.Text = 'Show weekly reset date and time'
     $controls.SharedWeeklyDate.AutoSize = $true
     $controls.SharedWeeklyDate.Checked = $script:SharedShowWeeklyResetDate
     Add-SettingsRow $tables.Shared '' $controls.SharedWeeklyDate
-    [void](Add-SettingsNote $tables.Shared 'Shared notifications appear on this computer for fresh imported readings. 0 = off.')
     foreach ($entry in @(@{Key='SharedPrimaryAlert';Label='5-hour warning below %';Value=$script:SharedPrimaryAlertThreshold},@{Key='SharedSecondaryAlert';Label='Weekly warning below %';Value=$script:SharedSecondaryAlertThreshold})) {
         $input = [Windows.Forms.NumericUpDown]::new()
         $input.Maximum = 100
@@ -150,7 +166,6 @@ function Show-WidgetSettings {
     $controls.SharedResetAlert.AutoSize = $true
     $controls.SharedResetAlert.Checked = $script:SharedNotifyPrimaryReset
     Add-SettingsRow $tables.Shared '' $controls.SharedResetAlert
-    [void](Add-SettingsNote $tables.Shared 'Reset alerts require weekly quota above 0%. Missing or stale files do not trigger alerts.')
     # Use independent writer and reader enable switches, paths, and frequency selectors.
     $controls.Name = [Windows.Forms.TextBox]::new()
     $controls.Name.MaxLength = 40
@@ -158,7 +173,7 @@ function Show-WidgetSettings {
     foreach ($kind in @('Write','Read')) {
         $enable = [Windows.Forms.CheckBox]::new()
         $enable.AutoSize = $true
-        $enable.Text = if ($kind -eq 'Write') { 'Write my usage to JSON' } else { 'Read the other computer''s JSON' }
+        $enable.Text = if ($kind -eq 'Write') { 'Write my usage to JSON' } else { 'Read the shared computer''s JSON' }
         $enable.Checked = if ($kind -eq 'Write') { $script:WriteUsageEnabled } else { $script:ReadUsageEnabled }
         $controls[$kind + 'Enabled'] = $enable
         Add-SettingsRow $tables.Shared '' $enable
@@ -188,9 +203,7 @@ function Show-WidgetSettings {
         $controls[$kind + 'Status'] = Add-SettingsNote $tables.Shared ''
     }
     $controls.SourceStatus = Add-SettingsNote $tables.Shared ''
-    [void](Add-SettingsNote $tables.Shared 'Use different output files on the two computers. Keep shared usage outside the public widget project. Writing preserves the reading''s original update time.')
     # Keep alerts local even while displaying a remote account or both accounts together.
-    [void](Add-SettingsNote $tables.General 'Notifications apply to this computer''s account. 0 = off. Warnings appear once per threshold crossing.')
     foreach ($entry in @(@{Key='PrimaryAlert';Label='5-hour warning below %';Value=$script:PrimaryAlertThreshold},@{Key='SecondaryAlert';Label='Weekly warning below %';Value=$script:SecondaryAlertThreshold})) {
         $input = [Windows.Forms.NumericUpDown]::new()
         $input.Maximum = 100
@@ -203,7 +216,24 @@ function Show-WidgetSettings {
     $controls.ResetAlert.AutoSize = $true
     $controls.ResetAlert.Checked = $script:NotifyPrimaryReset
     Add-SettingsRow $tables.General '' $controls.ResetAlert
-    [void](Add-SettingsNote $tables.General 'A reset notification requires weekly quota above 0%.')
+    # Map former help paragraphs to the settings and labels they explain.
+    Set-SettingsHelp $settingsToolTip $controls.Refresh 'Checks this computer''s Codex account. File timers use the latest available reading.'
+    foreach ($key in @('ResetHours','SharedResetHours')) {
+        Set-SettingsHelp $settingsToolTip $controls[$key] '0 = off. Later reset times are estimates assuming immediate reuse.'
+    }
+    foreach ($key in @('PrimaryAlert','SecondaryAlert')) {
+        Set-SettingsHelp $settingsToolTip $controls[$key] 'Notifications apply to this computer''s account. 0 = off. Warnings appear once per threshold crossing.'
+    }
+    Set-SettingsHelp $settingsToolTip $controls.ResetAlert 'A reset notification requires weekly quota above 0%.'
+    foreach ($key in @('SharedPrimaryAlert','SharedSecondaryAlert')) {
+        Set-SettingsHelp $settingsToolTip $controls[$key] 'Shared notifications appear on this computer for fresh imported readings. 0 = off. Warnings appear once per threshold crossing.'
+    }
+    Set-SettingsHelp $settingsToolTip $controls.SharedResetAlert 'Reset alerts require weekly quota above 0%. Missing or stale files do not trigger alerts.'
+    Set-SettingsHelp $settingsToolTip $controls.Layout 'Use independent settings for the second account. Side by side keeps two numeric columns at Mini size.'
+    Set-SettingsHelp $settingsToolTip $controls.SharedEnabled 'Unlock shared settings and enable the selected file connections. Turning Shared off preserves your choices and stops its display, file operations and notifications after Apply or Save.'
+    foreach ($key in @('WritePath','ReadPath','WriteBrowse','ReadBrowse')) {
+        Set-SettingsHelp $settingsToolTip $controls[$key] 'Use different output files on the two computers. Keep shared usage outside the public widget project. Writing preserves the reading''s original update time.'
+    }
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
         # Validate all sharing paths before changing any persistent setting.
@@ -215,7 +245,7 @@ function Show-WidgetSettings {
         if (-not $name) { $name = 'This computer' }
         if ((Get-LaunchAtSignIn) -ne $controls.Startup.Checked) { Set-LaunchAtSignIn $controls.Startup.Checked }
         # Reset imported values only when the source path changes, never on temporary sync errors.
-        if ($script:UsageInputPath -ne $inputPath) { $script:RemoteUsage = $null; $script:RemoteDisplayName = 'Other computer'; $script:ReadError = $null; $script:LastReadAt = $null }
+        if ($script:UsageInputPath -ne $inputPath) { $script:RemoteUsage = $null; $script:RemoteDisplayName = 'Shared computer'; $script:ReadError = $null; $script:LastReadAt = $null }
         if ($script:UsageOutputPath -ne $output) { $script:LastWrittenFetchedAt = 0; $script:LastWrittenAt = $null; $script:WriteError = $null }
         # Preserve draft connection switches and independent choices even when the master lock is off.
         $script:SharedEnabled = $controls.SharedEnabled.Checked
@@ -326,7 +356,7 @@ function Show-WidgetSettings {
                 $dialog.DialogResult = 'None'
             }
         }
-    } finally { $statusTimer.Stop(); $statusTimer.Dispose(); $dialog.Dispose() }
+    } finally { $statusTimer.Stop(); $statusTimer.Dispose(); $settingsToolTip.Dispose(); $dialog.Dispose() }
 }
 
 function Update-SharingTimer {

@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.0.3 — October 1, 2026
+
+- Move settings explanations to hover tooltips on their related controls and labels in General and Shared, reducing visual clutter while retaining live sharing status.
+- Rename default other-computer labels to Shared computer, preserving custom source names.
+- Keep help on numeric editors and release the tooltip component when Settings closes. Refresh documentation and settings screenshots.
+
 ## 2.0.2 — October 1, 2026
 
 - Use the full local hostname for OneDrive desktop shortcuts and retire owned shortcuts using the shortened Windows name.

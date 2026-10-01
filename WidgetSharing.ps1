@@ -25,7 +25,7 @@ $script:WriteIntervalMinutes = -1
 $script:ReadIntervalMinutes = -1
 $script:SharingSourceId = [guid]::NewGuid().ToString('N')
 $script:RemoteUsage = $null
-$script:RemoteDisplayName = 'Other computer'
+$script:RemoteDisplayName = 'Shared computer'
 $script:WriteError = $null
 $script:ReadError = $null
 $script:LastWrittenAt = $null
@@ -145,12 +145,12 @@ function Read-SharedUsage {
         if ($text.Length -gt 65536) { throw 'The input file is too large to be a usage snapshot.' }
         $incoming = $text | ConvertFrom-Json
         if ($incoming.schemaVersion -ne 1 -or $incoming.sourceId -notmatch '^[0-9a-f]{32}$' -or -not $incoming.usage) { throw 'This is not a supported usage snapshot.' }
-        if ($incoming.sourceId -eq $script:SharingSourceId) { throw 'This file belongs to this computer; select the other computer''s file.' }
+        if ($incoming.sourceId -eq $script:SharingSourceId) { throw 'This file belongs to this computer; select the shared computer''s file.' }
         $snapshot = ConvertTo-SharedUsage $incoming.usage
         # Keep the last valid reading if an older OneDrive copy temporarily replaces the file.
         if ($script:RemoteUsage -and $script:RemoteSourceId -eq [string]$incoming.sourceId -and $snapshot.fetchedAt -lt $script:RemoteUsage.fetchedAt) { throw 'An older synced copy arrived; keeping the newer reading.' }
         $label = ([string]$incoming.displayName -replace '[\p{C}]','').Trim()
-        $script:RemoteDisplayName = if ($label) { $label.Substring(0,[Math]::Min(40,$label.Length)) } else { 'Other computer' }
+        $script:RemoteDisplayName = if ($label) { $label.Substring(0,[Math]::Min(40,$label.Length)) } else { 'Shared computer' }
         $script:RemoteSourceId = [string]$incoming.sourceId
         $script:RemoteUsage = $snapshot
         $script:RemoteRefreshMinutes = if ($incoming.refreshIntervalMinutes -in @(0,1,5,15,30)) { [int]$incoming.refreshIntervalMinutes } else { 5 }
@@ -168,7 +168,7 @@ function Get-SharingStatus {
     # Report file operations separately from the source account's actual update time.
     if ($Kind -eq 'Source') {
         if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled) { return '' }
-        if (-not $script:RemoteUsage) { return 'Other computer: waiting for a valid reading' }
+        if (-not $script:RemoteUsage) { return 'Shared computer: waiting for a valid reading' }
         $age = [Math]::Max(0,([DateTimeOffset]::Now.ToUnixTimeSeconds() - $script:RemoteUsage.fetchedAt))
         $limit = [Math]::Max(120, 2 * $script:RemoteRefreshMinutes * 60)
         $ageText = if ($age -lt 60) { '{0}s' -f [int]$age } elseif ($age -lt 3600) { '{0}m' -f [int]($age / 60) } else { '{0:N1}h' -f ($age / 3600) }

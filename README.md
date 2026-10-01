@@ -2,7 +2,7 @@
 
 A small Windows desktop and tray widget for Codex **5-hour and weekly usage left**, reset times, credits, and notifications. Optionally show a second computer's account through private shared JSON files.
 
-**Version 2.0.2** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.0.3** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -24,7 +24,7 @@ Drag to move or resize. Use **↻** to refresh, **◉ / ○** for always on top,
 
 ## Settings
 
-Right-click the tray icon → **Settings...**. Two tabs, **General** and **Shared**, provide independent colors, credit display, reset details, and notifications for each account. **Apply** updates the widget without closing Settings; **Save** applies and closes. Shared settings lock when **Enable Shared** is off. **0 disables a warning threshold.** Reset alerts require weekly quota above 0%.
+Right-click the tray icon → **Settings...**. Two tabs, **General** and **Shared**, provide independent colors, credit display, reset details, and notifications for each account. **Apply** updates the widget without closing Settings; **Save** applies and closes. Shared settings lock when **Enable Shared** is off. Hover over settings or their labels for help. **0 disables a warning threshold.** Reset alerts require weekly quota above 0%.
 
 | General | Shared |
 | --- | --- |
