@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.1.0'
+$script:WidgetVersion = '2.1.1'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -135,7 +135,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetAccounts.ps1','WidgetSettings.p
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Codex Usage" Width="280" Height="290" WindowStyle="None"
-        MinWidth="72" MinHeight="58" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResizeWithGrip"
+        MinWidth="72" MinHeight="58" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False">
   <Border x:Name="OuterBorder" CornerRadius="18" Background="#F2161A23" BorderBrush="#413D4658" BorderThickness="1" Padding="18">
     <Border.Effect>
@@ -256,6 +256,13 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetAccounts.ps1','WidgetSettings.p
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#F06A7A" BorderThickness="0" FontSize="18" Cursor="Hand"/>
 
+      <!-- Show either resize corner on hover without reserving space in the usage layout. -->
+      <Thumb x:Name="LeftResizeGrip" Grid.RowSpan="5" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" Visibility="Collapsed" Tag="Left" ToolTip="Resize from bottom left">
+        <Thumb.Template><ControlTemplate TargetType="Thumb"><Grid Background="Transparent"><Path Data="M 1,9 L 7,15 M 1,12 L 4,15 M 1,15 L 2,15" Stroke="#AAB2C5" StrokeThickness="1.5"/></Grid></ControlTemplate></Thumb.Template>
+      </Thumb>
+      <Thumb x:Name="RightResizeGrip" Grid.RowSpan="5" Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" Visibility="Collapsed" Tag="Right" ToolTip="Resize from bottom right">
+        <Thumb.Template><ControlTemplate TargetType="Thumb"><Grid Background="Transparent"><Path Data="M 9,15 L 15,9 M 12,15 L 15,12 M 14,15 L 15,15" Stroke="#AAB2C5" StrokeThickness="1.5"/></Grid></ControlTemplate></Thumb.Template>
+      </Thumb>
     </Grid>
   </Border>
 </Window>
@@ -304,6 +311,9 @@ $refreshButton = $window.FindName('RefreshButton')
 $pinButton = $window.FindName('PinButton')
 $minimizeButton = $window.FindName('MinimizeButton')
 $closeButton = $window.FindName('CloseButton')
+# Bind both hover-only resizing corners to the same bounded resize operation.
+$leftResizeGrip = $window.FindName('LeftResizeGrip')
+$rightResizeGrip = $window.FindName('RightResizeGrip')
 # Expose the installed version without adding width to the responsive header.
 $window.Title = "Codex Usage v$script:WidgetVersion"
 $titleText.ToolTip = $window.Title
@@ -799,9 +809,12 @@ function Update-HoverControls {
     param([bool] $IsPointerOver = $outerBorder.IsMouseOver)
     # Account cards share the parent toolbar and must not create competing hover buttons.
     if ($script:RenderingAccountCard) {
+        $leftResizeGrip.Visibility = 'Collapsed'; $rightResizeGrip.Visibility = 'Collapsed'
         foreach ($control in @($compactRefreshButton,$hoverCloseButton,$hoverPinButton,$hoverMinimizeButton,$hoverRefreshButton)) { $control.Visibility = 'Collapsed' }
         return
     }
+    $gripVisibility = if ($IsPointerOver -or $leftResizeGrip.IsDragging -or $rightResizeGrip.IsDragging) { 'Visible' } else { 'Collapsed' }
+    $leftResizeGrip.Visibility = $gripVisibility; $rightResizeGrip.Visibility = $gripVisibility
     # Reveal missing header controls only while the pointer is over the widget.
     $showClose = $IsPointerOver -and $dragArea.Visibility -ne 'Visible'
     $hoverCloseButton.Visibility = if ($showClose) { 'Visible' } else { 'Collapsed' }
@@ -1463,6 +1476,11 @@ $closeButton.Add_Click({ $window.Close() })
 $hoverCloseButton.Add_Click({ $window.Close() })
 $outerBorder.Add_MouseEnter({ Update-HoverControls -IsPointerOver $true })
 $outerBorder.Add_MouseLeave({ Update-HoverControls -IsPointerOver $false })
+foreach ($grip in @($leftResizeGrip,$rightResizeGrip)) {
+    # Thumb owns pointer capture while resizing; ordinary widget dragging must not compete with it.
+    $grip.Add_DragDelta({ param($sender,$eventArgs) Resize-AccountWindow $window $sender.Tag $eventArgs.HorizontalChange $eventArgs.VerticalChange })
+    $grip.Add_DragCompleted({ Save-WidgetState; Update-HoverControls })
+}
 $window.Add_SizeChanged({ Update-ResponsiveLayout })
 $window.Add_StateChanged({
     if ($window.WindowState -eq [System.Windows.WindowState]::Minimized) {

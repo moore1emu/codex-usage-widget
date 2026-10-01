@@ -261,6 +261,15 @@ function Test-WidgetDragSource {
     return $true
 }
 
+function Resize-AccountWindow {
+    param($Target,[string]$Corner,[double]$HorizontalChange,[double]$VerticalChange)
+    # Anchor the opposite edge and clamp size so both corners behave consistently at minimum size.
+    $width = [Math]::Max($Target.MinWidth,$Target.Width + $(if ($Corner -eq 'Left') { -$HorizontalChange } else { $HorizontalChange }))
+    $height = [Math]::Max($Target.MinHeight,$Target.Height + $VerticalChange)
+    if ($Corner -eq 'Left') { $Target.Left += $Target.Width - $width }
+    $Target.Width = $width; $Target.Height = $height
+}
+
 function Save-SeparateWindowBounds {
     # Persist the imported window independently, including its own always-on-top choice.
     if (-not $script:SeparateView -or -not $script:SeparateView.Window.IsLoaded) { return }
@@ -296,6 +305,11 @@ function Initialize-SeparateWindow {
     $bindings = @{}
     foreach ($match in [regex]::Matches($script:WidgetSource,'\$(\w+) = \$window\.FindName\(''([^'']+)''\)')) { $bindings[$match.Groups[1].Value] = $peer.FindName($match.Groups[2].Value) }
     $script:SeparateView = @{ Window=$peer; Bindings=$bindings }
+    # Give the imported shell the same hover-only resize behavior without changing the local window.
+    foreach ($key in @('leftResizeGrip','rightResizeGrip')) {
+        $bindings[$key].Add_DragDelta({ param($sender,$eventArgs) Resize-AccountWindow $script:SeparateView.Window $sender.Tag $eventArgs.HorizontalChange $eventArgs.VerticalChange })
+        $bindings[$key].Add_DragCompleted({ Save-SeparateWindowBounds; Invoke-SeparateWindowAction { Update-HoverControls } })
+    }
     $peer.Icon = $window.Icon
     $peer.WindowStartupLocation = 'Manual'
     $peer.Left = $window.Left + $window.Width + 8

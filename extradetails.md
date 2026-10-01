@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.1.0.
+This guide covers Codex Usage Widget 2.1.1.
 
 ## Requirements
 
@@ -85,6 +85,8 @@ When the full header no longer fits, a small refresh button remains at the top r
 
 Open **Settings...** from the tray menu. **General** configures this computer's account plus window, refresh, and startup settings. **Shared** mirrors its color, credits, reset-display and notification controls for the imported account, and adds layouts and file connections. Shared controls are scrollable to reach connections below the account preferences.
 
+Dropdowns use consistent colors matching the panel's dark or light theme. Resize handles appear at both bottom corners on hover, including each separate account window.
+
 Explanations appear as hover tooltips on the related controls and labels; live lock state, file-operation status and source age remain visible.
 
 Settings remains open without blocking either desktop window. Account picker labels follow this computer's saved display name and the imported JSON nickname. The inline selector uses the widget's dark theme. Account headings shrink and shorten before disappearing; full names remain on hover.
@@ -117,11 +119,11 @@ Sharing is opt-in and configured separately on each computer under **Settings...
 | Output | `account-a.json` | `account-b.json` |
 | Input | `account-b.json` | `account-a.json` |
 
-Writing uses an atomic file replacement. Existing output files must belong to this widget's saved random source identifier; unrelated files and another computer's exports are not overwritten. Keep the local preferences file when updating the widget so its identifier and connections remain intact. After deleting local preferences, choose a new output filename rather than trying to claim an old export.
+Writing uses an atomic file replacement. Unchanged readings do not rewrite the export, even after a fresh usage check or manual refresh. Usage values, credits, resets, and account metadata changes are published at the selected write cadence. Automatic sharing checks in after 30 minutes without changes; explicit Manual only remains manual. The JSON records last usage change separately from the reading's actual check time. Unchanged shared files are checked by file metadata without reparsing. Existing output files must belong to this widget's saved random source identifier; unrelated files and another computer's exports are not overwritten. Keep the local preferences file when updating the widget so its identifier and connections remain intact. After deleting local preferences, choose a new output filename rather than trying to claim an old export.
 
-**Write frequency** and **Read frequency** each offer Match widget refresh, 1/5/15/30 minutes, or Manual only. Matched reads run when a local refresh starts; matched writes follow a successful local refresh. Separate write timers publish the latest existing reading, without making extra Codex requests or changing its original update time. Manual Refresh reads immediately and publishes when the local request succeeds. Saving an enabled connection performs an initial read/write if data is available. Independent file timers continue while minimized to the tray; disabled, manual, and matched connections add no idle file polling.
+**Write frequency** and **Read frequency** each offer Match widget refresh, 1/5/15/30 minutes, or Manual only. Matched reads run when a local refresh starts; matched writes follow a successful local refresh. Separate write timers publish the latest existing reading, without making extra Codex requests or changing its original update time. Manual Refresh reads immediately and publishes when the local request succeeds. Saving an enabled connection performs an initial read/write if data is available. Independent file timers continue while minimized to the tray; disabled and manual connections add no idle file polling. Automatic matched writers keep a lightweight timer for the 30-minute check-in.
 
-Sharing shows separate last-write/read statuses and the imported usage's age. A recent file read does not imply recent usage: if the shared computer/widget stops, its numbers remain visible and become **stale** after twice its reported refresh interval, with a two-minute minimum. Manual sources use that minimum. OneDrive delivery adds its own delay. Missing, malformed, or older files retain the last valid reading with an error indicator. An input path change clears the previous source. Imported readings are not cached across widget restarts; they reload from the selected file.
+Sharing shows separate last-write/read statuses and the imported usage's age. A recent file read does not imply recent usage: if the shared computer/widget stops, its numbers remain visible and become **stale** after the 30-minute check-in interval plus twice its reported refresh interval, with a two-minute minimum. Older exports without check-in metadata retain the previous twice-refresh-interval rule. Manual sources do not acquire fresh timestamps merely by rewriting an old reading. Shared alerts still require a reading within twice the source refresh interval, with a two-minute minimum. OneDrive delivery adds its own delay. Missing, malformed, or older files retain the last valid reading with an error indicator. An input path change clears the previous source. Imported readings are not cached across widget restarts; they reload from the selected file.
 
 The two sources are displayed independently, never summed. Tray bars and tray hover text always refer to the account signed in on this computer. General notification preferences apply locally; Shared notification preferences apply to imported readings and label their popups with the other account name. Shared thresholds default to 0 and its reset alert defaults to off. Warnings are sent once per crossing, with separate persisted history for each account. Shared reset alerts require weekly quota above 0%, just like local resets. Stale or failed file reads never trigger shared alerts. Independent credit and reset-display settings affect only their respective account cards. Side by side retains both numeric columns and a divider at Mini size; headings and update status stay available on hover when they no longer fit. The shared computer defaults to teal/lilac/sand so the two accounts are easy to distinguish.
 

@@ -30,7 +30,16 @@ $script:WriteError = $null
 $script:ReadError = $null
 $script:LastWrittenAt = $null
 $script:LastReadAt = $null
-$script:LastWrittenFetchedAt = 0
+# Compare meaningful values separately from refresh timestamps to avoid unnecessary synced writes.
+$script:PublishedUsageKey = $null
+$script:PublishedMetadataKey = $null
+$script:PublishedTarget = ''
+$script:PublishedCheckInReady = $false
+$script:UsageChangedAt = 0
+$script:SharedCheckInMinutes = 30
+$script:RemoteCheckInMinutes = 0
+$script:RemoteUsageChangedAt = 0
+$script:ReadFileStamp = ''
 $script:NextWriteAt = [DateTimeOffset]::Now
 $script:NextReadAt = [DateTimeOffset]::Now
 # Define each approved palette once for both accounts and the settings selectors.
@@ -98,32 +107,67 @@ function ConvertTo-SharedUsage {
     return [pscustomobject]$snapshot
 }
 
+function Get-SharedUsageKey {
+    param($Snapshot)
+    # Use stable field ordering and exclude fetchedAt, which changes on every successful check.
+    $values = [ordered]@{planType=$Snapshot.planType;ordinaryUsageAllowed=$Snapshot.ordinaryUsageAllowed}
+    foreach ($name in @('primary','secondary')) {
+        $quota = $Snapshot.$name
+        $values[$name] = if ($null -eq $quota) { $null } else { [ordered]@{usedPercent=$quota.usedPercent;resetsAt=$quota.resetsAt;windowDurationMins=$quota.windowDurationMins} }
+    }
+    $credits = $Snapshot.credits
+    $values.credits = if ($null -eq $credits) { $null } else { [ordered]@{balance=$credits.balance;hasCredits=$credits.hasCredits;unlimited=$credits.unlimited} }
+    return ($values | ConvertTo-Json -Depth 5 -Compress)
+}
+
 function Write-SharedUsage {
     param([switch] $Force)
     # A file timer may publish the latest reading, but must never change its original age.
     if (-not $script:SharedEnabled -or -not $script:WriteUsageEnabled -or -not $script:Usage -or $script:RefreshError) { return }
-    if (-not $Force -and [long]$script:Usage.fetchedAt -eq $script:LastWrittenFetchedAt) { return }
     $temporary = $null
     try {
         $target = Resolve-UsageFilePath $script:UsageOutputPath
+        $snapshot = ConvertTo-SharedUsage $script:Usage
+        $usageKey = Get-SharedUsageKey $snapshot
+        $metadataKey = @($script:LocalDisplayName,[string]$script:RefreshIntervalMinutes) | ConvertTo-Json -Compress
+        $now = [DateTimeOffset]::Now
+        # Skip unchanged snapshots before reading the output file; Force still respects change detection.
+        if ($script:PublishedCheckInReady -and $script:PublishedTarget -eq $target -and [IO.File]::Exists($target) -and
+            $usageKey -eq $script:PublishedUsageKey -and $metadataKey -eq $script:PublishedMetadataKey -and
+            $script:LastWrittenAt -and ($now - $script:LastWrittenAt).TotalMinutes -lt $script:SharedCheckInMinutes) { $script:WriteError=$null; return }
         # Never overwrite another computer's export or an unrelated existing JSON file.
         if ([IO.File]::Exists($target)) {
             if ([IO.FileInfo]::new($target).Length -gt 65536) { throw 'The output file already exists and is not this widget''s snapshot.' }
             $existing = [IO.File]::ReadAllText($target) | ConvertFrom-Json
             if ($existing.schemaVersion -ne 1 -or $existing.sourceId -ne $script:SharingSourceId) { throw 'The output file belongs to another source. Choose a different filename.' }
+            # Recover the last change time after restart without rewriting an unchanged owned file.
+            if ($script:PublishedTarget -ne $target) {
+                $previous = ConvertTo-SharedUsage $existing.usage
+                $script:PublishedUsageKey = Get-SharedUsageKey $previous
+                $script:PublishedMetadataKey = @([string]$existing.displayName,[string]$existing.refreshIntervalMinutes) | ConvertTo-Json -Compress
+                $script:UsageChangedAt = if ($existing.usageChangedAt -gt 0) { [long]$existing.usageChangedAt } else { [long]$previous.fetchedAt }
+                $script:LastWrittenAt = [DateTimeOffset]::FromUnixTimeSeconds([long]$existing.writtenAt)
+                $script:PublishedTarget = $target
+                $script:PublishedCheckInReady = $existing.checkInMinutes -eq 30
+                if ($existing.checkInMinutes -eq 30 -and $usageKey -eq $script:PublishedUsageKey -and $metadataKey -eq $script:PublishedMetadataKey -and ($now-$script:LastWrittenAt).TotalMinutes -lt 30) { $script:WriteError=$null; return }
+            }
         }
         if ($script:ReadUsageEnabled -and $target -eq (Resolve-UsageFilePath $script:UsageInputPath)) { throw 'Input and output must be different files.' }
         # Require the selected directory to exist; the widget does not create arbitrary folders.
         $directory = [IO.Path]::GetDirectoryName($target)
         if (-not [IO.Directory]::Exists($directory)) { throw 'The output folder is unavailable.' }
-        $snapshot = ConvertTo-SharedUsage $script:Usage
-        $payload = @{ schemaVersion=1; sourceId=$script:SharingSourceId; displayName=$script:LocalDisplayName; refreshIntervalMinutes=$script:RefreshIntervalMinutes; writtenAt=[DateTimeOffset]::Now.ToUnixTimeSeconds(); usage=$snapshot }
+        # Metadata updates publish immediately but do not mislabel unchanged quota as a usage change.
+        $changedAt = if ($usageKey -ne $script:PublishedUsageKey -or $script:UsageChangedAt -le 0 -or -not [IO.File]::Exists($target)) { $snapshot.fetchedAt } else { $script:UsageChangedAt }
+        $payload = @{ schemaVersion=1; sourceId=$script:SharingSourceId; displayName=$script:LocalDisplayName; refreshIntervalMinutes=$script:RefreshIntervalMinutes; checkInMinutes=30; usageChangedAt=$changedAt; writtenAt=$now.ToUnixTimeSeconds(); usage=$snapshot }
         # Write beside the destination and replace it atomically to avoid partial reads during sync.
         $temporary = Join-Path $directory ('.codex-usage-' + [guid]::NewGuid().ToString('N') + '.tmp')
         [IO.File]::WriteAllText($temporary, ($payload | ConvertTo-Json -Depth 7 -Compress), [Text.UTF8Encoding]::new($false))
         [IO.File]::Move($temporary, $target, $true)
-        $script:LastWrittenFetchedAt = $snapshot.fetchedAt
-        $script:LastWrittenAt = [DateTimeOffset]::Now
+        # Advance publication bookkeeping only after the atomic replacement succeeds.
+        $script:PublishedTarget=$target; $script:PublishedUsageKey=$usageKey; $script:PublishedMetadataKey=$metadataKey
+        $script:PublishedCheckInReady=$true
+        $script:UsageChangedAt=$changedAt
+        $script:LastWrittenAt = $now
         $script:WriteError = $null
     } catch { $script:WriteError = $_.Exception.Message }
     finally {
@@ -141,6 +185,14 @@ function Read-SharedUsage {
         $file = [IO.FileInfo]::new($path)
         if (-not $file.Exists) { throw 'The input file has not arrived yet.' }
         if ($file.Length -gt 65536) { throw 'The input file is too large to be a usage snapshot.' }
+        # Check file metadata at the chosen cadence, parsing only when OneDrive delivers a changed file.
+        $stamp = "$path|$($file.LastWriteTimeUtc.Ticks)|$($file.Length)"
+        if ($script:ReadFileStamp -eq $stamp -and $script:RemoteUsage) {
+            $script:LastReadAt=[DateTimeOffset]::Now; $script:ReadError=$null
+            # Reevaluate changed notification preferences against the cached snapshot's genuine age.
+            try { Show-SharedUsageWarnings; $script:SharedAlertError=$null } catch { $script:SharedAlertError=$_.Exception.Message }
+            return
+        }
         $text = [IO.File]::ReadAllText($path)
         if ($text.Length -gt 65536) { throw 'The input file is too large to be a usage snapshot.' }
         $incoming = $text | ConvertFrom-Json
@@ -154,6 +206,10 @@ function Read-SharedUsage {
         $script:RemoteSourceId = [string]$incoming.sourceId
         $script:RemoteUsage = $snapshot
         $script:RemoteRefreshMinutes = if ($incoming.refreshIntervalMinutes -in @(0,1,5,15,30)) { [int]$incoming.refreshIntervalMinutes } else { 5 }
+        # Older publishers retain their existing freshness rules and use the snapshot date as a fallback.
+        $script:RemoteCheckInMinutes = if ($incoming.checkInMinutes -eq 30) { 30 } else { 0 }
+        $script:RemoteUsageChangedAt = if ($incoming.usageChangedAt -gt 0 -and $incoming.usageChangedAt -le $snapshot.fetchedAt) { [long]$incoming.usageChangedAt } else { $snapshot.fetchedAt }
+        $script:ReadFileStamp=$stamp
         $script:LastReadAt = [DateTimeOffset]::Now
         $script:ReadError = $null
     } catch { $script:ReadError = $_.Exception.Message }
@@ -170,9 +226,10 @@ function Get-SharingStatus {
         if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled) { return '' }
         if (-not $script:RemoteUsage) { return 'Shared computer: waiting for a valid reading' }
         $age = [Math]::Max(0,([DateTimeOffset]::Now.ToUnixTimeSeconds() - $script:RemoteUsage.fetchedAt))
-        $limit = [Math]::Max(120, 2 * $script:RemoteRefreshMinutes * 60)
+        $limit = [Math]::Max(120, ($script:RemoteCheckInMinutes + 2 * $script:RemoteRefreshMinutes) * 60)
         $ageText = if ($age -lt 60) { '{0}s' -f [int]$age } elseif ($age -lt 3600) { '{0}m' -f [int]($age / 60) } else { '{0:N1}h' -f ($age / 3600) }
-        return "$script:RemoteDisplayName · usage updated $ageText ago" + $(if ($age -gt $limit) { ' · stale' } else { '' })
+        $changed = [DateTimeOffset]::FromUnixTimeSeconds([long]$script:RemoteUsageChangedAt).ToLocalTime().ToString('MMM d, h:mm tt')
+        return "$script:RemoteDisplayName · last usage change $changed · last checked $ageText ago" + $(if ($age -gt $limit) { ' · stale' } else { '' })
     }
     $enabled = if ($Kind -eq 'Write') { $script:WriteUsageEnabled } else { $script:ReadUsageEnabled }
     if (-not $script:SharedEnabled -or -not $enabled) { return "$Kind is off" }
@@ -188,14 +245,18 @@ function Invoke-SharingTick {
     # Check independent file timers even while the desktop window is minimized to the tray.
     if (-not $script:SharedEnabled) { return }
     $now = [DateTimeOffset]::Now
-    if ($script:WriteUsageEnabled -and $script:WriteIntervalMinutes -gt 0 -and $now -ge $script:NextWriteAt) {
+    $scheduledWrite = $script:WriteIntervalMinutes -gt 0 -and $now -ge $script:NextWriteAt
+    # Keep a 30-minute check-in between scheduled writes while preserving explicit manual-only choices.
+    $automaticWrite = $script:WriteIntervalMinutes -gt 0 -or ($script:WriteIntervalMinutes -eq -1 -and $script:RefreshIntervalMinutes -gt 0)
+    $checkInDue = $automaticWrite -and $script:LastWrittenAt -and ($now-$script:LastWrittenAt).TotalMinutes -ge 30
+    if ($script:WriteUsageEnabled -and ($scheduledWrite -or $checkInDue)) {
         Write-SharedUsage
-        $script:NextWriteAt = $now.AddMinutes($script:WriteIntervalMinutes)
+        if ($scheduledWrite) { $script:NextWriteAt = $now.AddMinutes($script:WriteIntervalMinutes) }
     }
     if ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0 -and $now -ge $script:NextReadAt) {
         Read-SharedUsage
         $script:NextReadAt = $now.AddMinutes($script:ReadIntervalMinutes)
-        if ($window.IsVisible) { Update-Display }
+        if ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible)) { Update-Display }
     }
 }
 

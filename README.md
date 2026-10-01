@@ -2,7 +2,7 @@
 
 A small Windows desktop and tray widget for Codex **5-hour and weekly usage left**, reset times, credits, and notifications. Optionally show a second computer's account through private shared JSON files.
 
-**Version 2.1.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.1.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -20,7 +20,7 @@ Percentages show **quota remaining**: 100% is full and 0% is exhausted. Credits 
 | --- | --- | --- | --- |
 | <img src="docs/screenshots/widget-mini.png" alt="Mini widget" width="72"> | <img src="docs/screenshots/widget-small.png" alt="Small widget" width="140"> | <img src="docs/screenshots/widget-medium.png" alt="Medium widget" width="190"> | <img src="docs/screenshots/widget-large.png" alt="Large widget" width="280"> |
 
-Drag to move or resize. Use **↻** to refresh, **◉ / ○** for always on top, **—** to minimize to the tray, and **×** to exit (hide just that account in Separate windows). Hidden buttons appear on hover. Double-click the tray icon to restore the window; hover for local quota and available credits.
+Drag to move; hover to resize from either bottom corner. Use **↻** to refresh, **◉ / ○** for always on top, **—** to minimize to the tray, and **×** to exit (hide just that account in Separate windows). Hidden buttons appear on hover. Double-click the tray icon to restore the window; hover for local quota and available credits.
 
 ## Settings
 
@@ -30,7 +30,7 @@ Right-click the tray icon → **Settings...**. Two tabs, **General** and **Share
 | --- | --- |
 | <img src="docs/screenshots/settings-general.png" alt="General settings tab" width="340"> | <img src="docs/screenshots/settings-shared.png" alt="Shared settings tab" width="340"> |
 
-For two accounts, choose a private synced folder outside this project. Each computer writes its own file and reads the other's. Shared starts off; enable it to unlock the connection and second-account settings. Choose **Side by side**, **Stacked**, **Account picker**, or **Separate windows**; Side by side keeps two numeric columns at Mini size. Separate windows remember independent sizes and positions; use the tray menu to reopen either account. File refreshes can match the widget or use separate timers. [Setup instructions](extradetails.md#two-computers-and-file-sharing).
+For two accounts, choose a private synced folder outside this project. Each computer writes its own file and reads the other's. Shared starts off; enable it to unlock the connection and second-account settings. Choose **Side by side**, **Stacked**, **Account picker**, or **Separate windows**; Side by side keeps two numeric columns at Mini size. Separate windows remember independent sizes and positions; use the tray menu to reopen either account. File checks can match the widget or use separate timers. Exports change only when usage or account details change, with an automatic check-in at least every 30 minutes. [Setup instructions](extradetails.md#two-computers-and-file-sharing).
 
 Screenshots show captured usage and settings, not live values. Settings stay local to each computer.
 

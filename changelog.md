@@ -2,6 +2,13 @@
 
 [Back to README](README.md)
 
+## 2.1.1 — October 1, 2026
+
+- Skip unchanged JSON exports, including new fetch timestamps and restart; publish meaningful changes and automatic 30-minute check-ins. Preserve manual-only behavior, output ownership, and original reading age.
+- Separate last usage change from last checked; cache unchanged imported files and allow the longer check-in cadence for stale display while keeping notification freshness strict.
+- Show resize handles at both bottom corners only on hover for local and separate shared windows.
+- Match every Settings dropdown to the panel's system dark/light colors.
+
 ## 2.1.0 — October 1, 2026
 
 - Keep Settings open while interacting with either widget; preserve Apply, Save, and Cancel behavior.

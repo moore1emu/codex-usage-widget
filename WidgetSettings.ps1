@@ -1,12 +1,68 @@
 function New-SettingsChoice {
     param([string[]] $Choices, [string] $Selected)
+    # Replace only the native selector chrome that otherwise keeps a white arrow in dark mode.
+    if (-not ('CodexUsageWidget.ThemedComboBox' -as [type])) {
+        $themeReferences = @([ComponentModel.Component].Assembly.Location) + @([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -match '^System\.(Windows\.Forms|Drawing|Private\.Windows)' -and -not $_.IsDynamic } | ForEach-Object { $_.Location })
+        Add-Type -ReferencedAssemblies $themeReferences -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+namespace CodexUsageWidget {
+    public class ThemedComboBox : ComboBox {
+        protected override void WndProc(ref Message message) {
+            // Preserve the normal dropdown, keyboard input and accessibility behavior.
+            base.WndProc(ref message);
+            if (message.Msg != 0x000F && message.Msg != 0x0317 && message.Msg != 0x0318) return;
+            // Paint the same arrow and outline for on-screen rendering and bitmap previews.
+            using (Graphics graphics = message.Msg == 0x000F ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(message.WParam)) {
+                int arrowWidth = SystemInformation.VerticalScrollBarWidth;
+                int x = ClientSize.Width - arrowWidth;
+                using (Brush background = new SolidBrush(BackColor)) graphics.FillRectangle(background, x, 0, arrowWidth, ClientSize.Height);
+                Color text = Enabled ? ForeColor : SystemColors.GrayText;
+                using (Pen border = new Pen(BackColor.GetBrightness() < .5f ? Color.FromArgb(80,80,80) : Color.FromArgb(160,160,160))) graphics.DrawRectangle(border, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+                int center = x + arrowWidth / 2;
+                int y = ClientSize.Height / 2;
+                using (Brush arrow = new SolidBrush(text)) graphics.FillPolygon(arrow, new Point[] { new Point(center-3,y-1), new Point(center+3,y-1), new Point(center,y+2) });
+            }
+        }
+    }
+}
+'@
+    }
     # Use native non-editable selectors so unsupported values cannot be entered.
-    $control = [Windows.Forms.ComboBox]::new()
+    $control = [CodexUsageWidget.ThemedComboBox]::new()
     $control.DropDownStyle = 'DropDownList'
+    # Draw all selector text ourselves so Windows cannot leave selected dropdowns white in dark mode.
+    $control.DrawMode = 'OwnerDrawFixed'
+    $control.FlatStyle = 'Popup'
+    $control.Add_DrawItem({
+        param($sender,$eventArgs)
+        if ($eventArgs.Index -lt 0) { return }
+        # Distinguish the highlighted dropdown row while leaving the closed selector's colors unchanged.
+        $highlighted = ($eventArgs.State -band [Windows.Forms.DrawItemState]::Selected) -and -not ($eventArgs.State -band [Windows.Forms.DrawItemState]::ComboBoxEdit)
+        $dark = $sender.BackColor.GetBrightness() -lt 0.5
+        $background = if ($highlighted -and $dark) { [Drawing.Color]::FromArgb(65,65,65) } elseif ($highlighted) { [Drawing.SystemColors]::Highlight } else { $sender.BackColor }
+        $brush = [Drawing.SolidBrush]::new($background)
+        try { $eventArgs.Graphics.FillRectangle($brush,$eventArgs.Bounds) } finally { $brush.Dispose() }
+        $color = if (-not $sender.Enabled) { [Drawing.SystemColors]::GrayText } elseif ($highlighted -and -not $dark) { [Drawing.SystemColors]::HighlightText } else { $sender.ForeColor }
+        [Windows.Forms.TextRenderer]::DrawText($eventArgs.Graphics,[string]$sender.Items[$eventArgs.Index],$sender.Font,$eventArgs.Bounds,$color,([Windows.Forms.TextFormatFlags]::Left -bor [Windows.Forms.TextFormatFlags]::VerticalCenter -bor [Windows.Forms.TextFormatFlags]::EndEllipsis -bor [Windows.Forms.TextFormatFlags]::NoPrefix))
+        $eventArgs.DrawFocusRectangle()
+    })
     $control.Items.AddRange([object[]]$Choices)
     $control.SelectedItem = $Selected
     if ($control.SelectedIndex -lt 0) { $control.SelectedIndex = 0 }
     return $control
+}
+
+function Set-SettingsChoiceTheme {
+    param($Dialog,$Controls)
+    # Follow the rendered panel's actual color, including the system high-contrast preference.
+    $dark = $Dialog.BackColor.GetBrightness() -lt 0.5
+    foreach ($control in $Controls.Values) {
+        if ($control -isnot [Windows.Forms.ComboBox]) { continue }
+        $control.BackColor = if ([Windows.Forms.SystemInformation]::HighContrast) { [Drawing.SystemColors]::Window } elseif ($dark) { [Drawing.Color]::FromArgb(45,45,45) } else { [Drawing.Color]::White }
+        $control.ForeColor = if ([Windows.Forms.SystemInformation]::HighContrast) { [Drawing.SystemColors]::WindowText } elseif ($dark) { [Drawing.Color]::FromArgb(235,235,235) } else { [Drawing.Color]::Black }
+    }
 }
 
 function Add-SettingsRow {
@@ -236,7 +292,7 @@ function Show-WidgetSettings {
     Set-SettingsHelp $settingsToolTip $controls.Layout 'Use independent settings for the second account. Side by side keeps two numeric columns at Mini size.'
     Set-SettingsHelp $settingsToolTip $controls.SharedEnabled 'Unlock shared settings and enable the selected file connections. Turning Shared off preserves your choices and stops its display, file operations and notifications after Apply or Save.'
     foreach ($key in @('WritePath','ReadPath','WriteBrowse','ReadBrowse')) {
-        Set-SettingsHelp $settingsToolTip $controls[$key] 'Use different output files on the two computers. Keep shared usage outside the public widget project. Writing preserves the reading''s original update time.'
+        Set-SettingsHelp $settingsToolTip $controls[$key] 'Use different output files on the two computers. Keep shared usage outside the public widget project. Writes occur when usage or account details change, with a 30-minute check-in during automatic sharing. Manual only remains manual. Last usage change is separate from the actual last check.'
     }
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
@@ -249,8 +305,8 @@ function Show-WidgetSettings {
         if (-not $name) { $name = 'This computer' }
         if ((Get-LaunchAtSignIn) -ne $controls.Startup.Checked) { Set-LaunchAtSignIn $controls.Startup.Checked }
         # Reset imported values only when the source path changes, never on temporary sync errors.
-        if ($script:UsageInputPath -ne $inputPath) { $script:RemoteUsage = $null; $script:RemoteDisplayName = 'Shared computer'; $script:ReadError = $null; $script:LastReadAt = $null }
-        if ($script:UsageOutputPath -ne $output) { $script:LastWrittenFetchedAt = 0; $script:LastWrittenAt = $null; $script:WriteError = $null }
+        if ($script:UsageInputPath -ne $inputPath) { $script:RemoteUsage = $null; $script:RemoteDisplayName = 'Shared computer'; $script:ReadFileStamp=''; $script:ReadError = $null; $script:LastReadAt = $null }
+        if ($script:UsageOutputPath -ne $output) { $script:PublishedTarget=''; $script:PublishedUsageKey=$null; $script:PublishedMetadataKey=$null; $script:UsageChangedAt=0; $script:LastWrittenAt = $null; $script:WriteError = $null }
         # Preserve draft connection switches and independent choices even when the master lock is off.
         $script:SharedEnabled = $controls.SharedEnabled.Checked
         $script:SharedCreditDisplayMode = @('Available','Always','Off')[$controls.SharedCredits.SelectedIndex]
@@ -368,6 +424,7 @@ function Show-WidgetSettings {
     $script:SettingsForm = $dialog
     try {
         $dialog.Show()
+        Set-SettingsChoiceTheme $dialog $controls
         [Windows.Threading.Dispatcher]::PushFrame($settingsFrame)
     } finally {
         # Release all help and status resources when Settings or the application closes.
@@ -377,8 +434,8 @@ function Show-WidgetSettings {
 }
 
 function Update-SharingTimer {
-    # Keep file polling idle when both sharing directions are disabled or manual/matched only.
+    # Automatic matched writers also need a timer for their 30-minute check-in; manual writers stay idle.
     if (-not $script:SharingTimer) { return }
     $script:SharingTimer.Stop()
-    if ($script:SharedEnabled -and (($script:WriteUsageEnabled -and $script:WriteIntervalMinutes -gt 0) -or ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0))) { $script:SharingTimer.Start() }
+    if ($script:SharedEnabled -and (($script:WriteUsageEnabled -and ($script:WriteIntervalMinutes -gt 0 -or ($script:WriteIntervalMinutes -eq -1 -and $script:RefreshIntervalMinutes -gt 0))) -or ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0))) { $script:SharingTimer.Start() }
 }
