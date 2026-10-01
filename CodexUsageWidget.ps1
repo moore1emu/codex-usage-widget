@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.1.1'
+$script:WidgetVersion = '2.1.2'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -49,6 +49,9 @@ namespace CodexUsageWidget {
         // Move directly without entering the shell's snap-enabled move loop.
         [DllImport("user32.dll")]
         public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+        // Give shortcut restart a distinct shutdown request from per-account WM_CLOSE.
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern uint RegisterWindowMessage(string name);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool DestroyIcon(IntPtr handle);
 
@@ -1494,6 +1497,23 @@ $trayRefreshItem.Add_Click({ Invoke-WidgetRefresh })
 # Apply settings through one native dialog instead of several competing menus.
 $settingsItem.Add_Click({ Show-WidgetSettings })
 $trayExitItem.Add_Click({ $script:ExitRequested = $true; $window.Close() })
+# Shortcut restart must exit the whole application even when either account is hidden to the tray.
+$script:RestartExitMessage = [CodexUsageWidget.NativeMethods]::RegisterWindowMessage('CodexUsageWidget.RestartExit')
+$window.Add_SourceInitialized({
+    $handle = [Windows.Interop.WindowInteropHelper]::new($window).Handle
+    $script:RestartWindowSource = [Windows.Interop.HwndSource]::FromHwnd($handle)
+    $script:RestartWindowHook = [Windows.Interop.HwndSourceHook]{
+        param($handle,$message,$wParam,$lParam,[ref]$handled)
+        if ($message -eq $script:RestartExitMessage) {
+            # Queue the normal Exit path outside the native callback to save both windows safely.
+            $handled.Value = $true
+            $script:ExitRequested = $true
+            [void]$window.Dispatcher.BeginInvoke([Action]{ $window.Close() })
+        }
+        return [IntPtr]::Zero
+    }
+    $script:RestartWindowSource.AddHook($script:RestartWindowHook)
+})
 $window.Add_Closing({
     # In Separate windows, the close button hides just the local account to the shared tray.
     if ($script:SeparateWindowsActive -and -not $script:ExitRequested) { $_.Cancel=$true; Save-WidgetState; $window.Hide(); return }

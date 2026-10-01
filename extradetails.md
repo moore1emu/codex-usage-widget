@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.1.1.
+This guide covers Codex Usage Widget 2.1.2.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ Double-click `Start-CodexUsageWidget.cmd`.
 
 If this folder's widget is already running in your Windows session, a manual launch offers **Restart widget** or **Cancel**. Restart closes the old instance normally so settings are saved before loading the current version. If it cannot close within 10 seconds, the launcher asks you to close it yourself; it never force-kills the widget. Simultaneous shortcut clicks are coordinated to avoid competing launches. Launch through the CMD file or desktop shortcut; directly running the main script bypasses this check.
 
-Enable **Launch at Windows sign-in** in the tray menu to start the desktop widget when you sign in. The setting uses a per-user Startup shortcut and is independent on each computer. Turn it off in the same menu to remove that shortcut. Automatic startup quietly leaves an existing instance running. Keep the widget folder in place and available locally at sign-in. Closing the Codex desktop app does not stop the widget: the widget uses its own short-lived usage-reader process and the locally installed Codex executable and saved sign-in.
+Enable **Launch at Windows sign-in** in the tray menu to start the desktop widget when you sign in. The setting uses a per-user Startup shortcut and is independent on each computer. Turn it off in the same menu to remove that shortcut. Automatic startup quietly leaves an existing instance running. Manual shortcut restart requests a full application exit, saves both account windows, and closes Settings before launching the replacement. When updating from 2.1.1 or earlier, choose **Exit** from the existing tray menu once before launching the updated version. Keep the widget folder in place and available locally at sign-in. Closing the Codex desktop app does not stop the widget: the widget uses its own short-lived usage-reader process and the locally installed Codex executable and saved sign-in.
 
 For a shortcut with the three-color icon, double-click **Create-DesktopShortcut.cmd** after placing the widget folder in its permanent location. It creates a local desktop shortcut using that computer's paths. Include both `Create-DesktopShortcut.cmd` and `Create-DesktopShortcut.ps1` when sharing the widget files. Each recipient runs the helper once; the generated `.lnk` contains local paths. If its destination is inside a registered OneDrive folder, the helper names it **Codex Usage - HOSTNAME** using the full local hostname (falling back to the Windows computer name if unavailable) so synced desktops do not overwrite each other's shortcuts. Elsewhere it remains **Codex Usage**. Detection uses OneDrive account registrations and environment variables, including custom sync locations. The helper removes an old generic or shortened-name shortcut only if it points to this exact widget folder; shared computers' shortcuts are preserved. Each named shortcut works on its intended computer. Alternatively, `Start-CodexUsageWidget.cmd` already launches portably from the folder beside it. Creating a shortcut does not install PowerShell 7 or Codex, enable Windows startup, or launch the widget.
 

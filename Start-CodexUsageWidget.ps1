@@ -63,17 +63,21 @@ namespace CodexUsageLauncher {
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
         [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int length);
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wparam, IntPtr lparam);
+        // Register the same dedicated shutdown message as the widget, without closing individual accounts.
+        [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
         public static bool RequestClose(int processId) {
             bool sent = false;
-            // WM_CLOSE follows the normal settings-save and tray-cleanup path; never kill the process.
+            // Restart uses the full Exit path; ordinary WM_CLOSE only hides one account in Separate windows.
+            uint exitMessage = RegisterWindowMessage("CodexUsageWidget.RestartExit");
             EnumWindows(delegate(IntPtr hwnd, IntPtr ignored) {
                 uint pid;
                 GetWindowThreadProcessId(hwnd, out pid);
                 if (pid != processId) return true;
                 var title = new StringBuilder(256);
                 GetWindowText(hwnd, title, title.Capacity);
-                if (title.ToString().StartsWith("Codex Usage v", StringComparison.Ordinal))
-                    sent = PostMessage(hwnd, 0x0010, IntPtr.Zero, IntPtr.Zero) || sent;
+                if (title.ToString().StartsWith("Codex Usage v", StringComparison.Ordinal) &&
+                    !title.ToString().EndsWith("Settings", StringComparison.Ordinal))
+                    sent = PostMessage(hwnd, exitMessage, IntPtr.Zero, IntPtr.Zero) || sent;
                 return true;
             }, IntPtr.Zero);
             return sent;
@@ -93,7 +97,7 @@ namespace CodexUsageLauncher {
                 throw 'Close the current widget before launching. Its window is not ready to close normally.'
             }
             if (-not $process.WaitForExit(10000)) {
-                throw 'Close the current widget before launching. It did not finish closing within 10 seconds; it has not been force-closed.'
+                throw 'Close the current widget before launching. It did not finish closing within 10 seconds; it has not been force-closed. If this is an older version, choose Exit from its tray menu once, then launch again.'
             }
         } finally { $process.Dispose() }
     }

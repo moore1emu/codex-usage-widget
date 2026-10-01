@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.1.2 — October 1, 2026
+
+- Give shortcut restart a dedicated full-application shutdown request. Save both account windows and close the shared window and Settings, including when either account is hidden to the tray.
+- Preserve per-account close/minimize behavior and the startup leave-running option. Never force-kill an unresponsive or older widget; show one-time tray Exit instructions for older versions.
+
 ## 2.1.1 — October 1, 2026
 
 - Skip unchanged JSON exports, including new fetch timestamps and restart; publish meaningful changes and automatic 30-minute check-ins. Preserve manual-only behavior, output ownership, and original reading age.
