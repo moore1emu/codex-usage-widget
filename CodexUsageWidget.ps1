@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.1.2'
+$script:WidgetVersion = '2.1.3'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -259,11 +259,11 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetAccounts.ps1','WidgetSettings.p
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#F06A7A" BorderThickness="0" FontSize="18" Cursor="Hand"/>
 
-      <!-- Show either resize corner on hover without reserving space in the usage layout. -->
-      <Thumb x:Name="LeftResizeGrip" Grid.RowSpan="5" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" Visibility="Collapsed" Tag="Left" ToolTip="Resize from bottom left">
+      <!-- Keep resize handles above account cards, which are added to this grid after loading. -->
+      <Thumb x:Name="LeftResizeGrip" Panel.ZIndex="100" Grid.RowSpan="5" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" Visibility="Collapsed" Tag="Left" ToolTip="Resize from bottom left">
         <Thumb.Template><ControlTemplate TargetType="Thumb"><Grid Background="Transparent"><Path Data="M 1,9 L 7,15 M 1,12 L 4,15 M 1,15 L 2,15" Stroke="#AAB2C5" StrokeThickness="1.5"/></Grid></ControlTemplate></Thumb.Template>
       </Thumb>
-      <Thumb x:Name="RightResizeGrip" Grid.RowSpan="5" Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" Visibility="Collapsed" Tag="Right" ToolTip="Resize from bottom right">
+      <Thumb x:Name="RightResizeGrip" Panel.ZIndex="100" Grid.RowSpan="5" Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" Visibility="Collapsed" Tag="Right" ToolTip="Resize from bottom right">
         <Thumb.Template><ControlTemplate TargetType="Thumb"><Grid Background="Transparent"><Path Data="M 9,15 L 15,9 M 12,15 L 15,12 M 14,15 L 15,15" Stroke="#AAB2C5" StrokeThickness="1.5"/></Grid></ControlTemplate></Thumb.Template>
       </Thumb>
     </Grid>

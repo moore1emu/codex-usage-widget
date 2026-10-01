@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.1.2.
+This guide covers Codex Usage Widget 2.1.3.
 
 ## Requirements
 

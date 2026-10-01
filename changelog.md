@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.1.3 — October 1, 2026
+
+- Keep both hover resize handles above dynamically added account cards so clicks reach the handles in combined and separate windows. Validate actual hit targets and resizing at full and compact sizes.
+
 ## 2.1.2 — October 1, 2026
 
 - Give shortcut restart a dedicated full-application shutdown request. Save both account windows and close the shared window and Settings, including when either account is hidden to the tray.
