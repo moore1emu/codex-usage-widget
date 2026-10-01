@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.1.3'
+$script:WidgetVersion = '2.1.4'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -241,21 +241,21 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetAccounts.ps1','WidgetSettings.p
         </Grid>
       </Border>
 
-      <!-- Keep refresh available when the rest of the header no longer fits. -->
-      <Button x:Name="CompactRefreshButton" Grid.RowSpan="5" Content="↻" ToolTip="Refresh now"
+      <!-- Keep compact actions above dynamically added account cards so pointer clicks reach them. -->
+      <Button x:Name="CompactRefreshButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="↻" ToolTip="Refresh now"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="Transparent" Foreground="#AAB2C5" BorderThickness="0" FontSize="16" Cursor="Hand"/>
       <!-- Reveal missing window controls on hover without reserving permanent readout space. -->
-      <Button x:Name="HoverPinButton" Grid.RowSpan="5" Content="◉" ToolTip="Always on top: on"
+      <Button x:Name="HoverPinButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="◉" ToolTip="Always on top: on"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#78A7FF" BorderThickness="0" FontSize="16" Cursor="Hand"/>
-      <Button x:Name="HoverMinimizeButton" Grid.RowSpan="5" Content="—" ToolTip="Minimize to tray"
+      <Button x:Name="HoverMinimizeButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="—" ToolTip="Minimize to tray"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#AAB2C5" BorderThickness="0" FontSize="16" Cursor="Hand"/>
-      <Button x:Name="HoverRefreshButton" Grid.RowSpan="5" Content="↻" ToolTip="Refresh now"
+      <Button x:Name="HoverRefreshButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="↻" ToolTip="Refresh now"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Margin="0,0,24,0" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#AAB2C5" BorderThickness="0" FontSize="16" Cursor="Hand"/>
-      <Button x:Name="HoverCloseButton" Grid.RowSpan="5" Content="×" ToolTip="Close Codex Usage"
+      <Button x:Name="HoverCloseButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="×" ToolTip="Close Codex Usage"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#F06A7A" BorderThickness="0" FontSize="18" Cursor="Hand"/>
 
@@ -1422,6 +1422,10 @@ if (Test-Path -LiteralPath $script:StatePath) {
 }
 else {
     $window.WindowStartupLocation = 'CenterScreen'
+}
+# Recover saved positions beyond the connected desktop before showing the main window.
+if ($window.WindowStartupLocation -eq 'Manual') {
+    Restore-AccountWindowBounds $window @{ left=$window.Left;top=$window.Top;width=$window.Width;height=$window.Height;topmost=$window.Topmost }
 }
 # Apply a coordinated palette and create the optional peer views after restoring local preferences.
 Set-AccountScheme $script:LocalScheme

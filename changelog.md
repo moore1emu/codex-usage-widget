@@ -2,6 +2,13 @@
 
 [Back to README](README.md)
 
+## 2.1.4 — October 1, 2026
+
+- Keep compact refresh and hover controls above account cards so they remain clickable in every shared layout and both separate windows.
+- Save shared-window resize bounds on release and combine other size/location changes into one delayed settings write, reducing disk activity during movement.
+- Recover saved main-window positions beyond the connected desktop at startup using the same bounds validation as separate windows.
+- Include portable, isolated regression checks for pointer targets, geometry persistence, change-only sharing, and shortcut shutdown. Tests use temporary preferences and example readings without accessing live account data.
+
 ## 2.1.3 — October 1, 2026
 
 - Keep both hover resize handles above dynamically added account cards so clicks reach the handles in combined and separate windows. Validate actual hit targets and resizing at full and compact sizes.

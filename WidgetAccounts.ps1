@@ -266,16 +266,32 @@ function Resize-AccountWindow {
     # Anchor the opposite edge and clamp size so both corners behave consistently at minimum size.
     $width = [Math]::Max($Target.MinWidth,$Target.Width + $(if ($Corner -eq 'Left') { -$HorizontalChange } else { $HorizontalChange }))
     $height = [Math]::Max($Target.MinHeight,$Target.Height + $VerticalChange)
-    if ($Corner -eq 'Left') { $Target.Left += $Target.Width - $width }
-    $Target.Width = $width; $Target.Height = $height
+    # Avoid scheduling intermediate saves while one corner movement updates several properties.
+    $previousResize = $script:ResizingAccountWindow
+    $script:ResizingAccountWindow = $true
+    try {
+        if ($Corner -eq 'Left') { $Target.Left += $Target.Width - $width }
+        $Target.Width = $width; $Target.Height = $height
+    } finally { $script:ResizingAccountWindow = $previousResize }
 }
 
 function Save-SeparateWindowBounds {
+    # A completed drag, preset or shutdown already saves the final bounds; discard queued duplicates.
+    if ($script:SeparateBoundsSaveTimer) { $script:SeparateBoundsSaveTimer.Stop() }
     # Persist the imported window independently, including its own always-on-top choice.
     if (-not $script:SeparateView -or -not $script:SeparateView.Window.IsLoaded) { return }
     $peer = $script:SeparateView.Window
     $script:SeparateRemoteBounds = @{ left=$peer.Left;top=$peer.Top;width=$peer.Width;height=$peer.Height;topmost=$peer.Topmost }
     Save-WidgetState
+}
+
+function Schedule-SeparateWindowBoundsSave {
+    # Custom dragging saves on release; debounce other size and position events until they settle.
+    if ($script:ChangingAccountWindows -or $script:ResizingAccountWindow -or $script:DragOrigin) { return }
+    $bindings = $script:SeparateView.Bindings
+    if ($bindings.leftResizeGrip.IsDragging -or $bindings.rightResizeGrip.IsDragging) { return }
+    $script:SeparateBoundsSaveTimer.Stop()
+    $script:SeparateBoundsSaveTimer.Start()
 }
 
 function Restore-AccountWindowBounds {
@@ -305,6 +321,10 @@ function Initialize-SeparateWindow {
     $bindings = @{}
     foreach ($match in [regex]::Matches($script:WidgetSource,'\$(\w+) = \$window\.FindName\(''([^'']+)''\)')) { $bindings[$match.Groups[1].Value] = $peer.FindName($match.Groups[2].Value) }
     $script:SeparateView = @{ Window=$peer; Bindings=$bindings }
+    # Coalesce native size and location changes into one settings write after a short idle period.
+    $script:SeparateBoundsSaveTimer = [Windows.Threading.DispatcherTimer]::new()
+    $script:SeparateBoundsSaveTimer.Interval = [TimeSpan]::FromMilliseconds(300)
+    $script:SeparateBoundsSaveTimer.Add_Tick({ Save-SeparateWindowBounds })
     # Give the imported shell the same hover-only resize behavior without changing the local window.
     foreach ($key in @('leftResizeGrip','rightResizeGrip')) {
         $bindings[$key].Add_DragDelta({ param($sender,$eventArgs) Resize-AccountWindow $script:SeparateView.Window $sender.Tag $eventArgs.HorizontalChange $eventArgs.VerticalChange })
@@ -341,8 +361,9 @@ function Initialize-SeparateWindow {
     $bindings.outerBorder.Add_LostMouseCapture({ $script:DragOrigin=$null })
     $bindings.outerBorder.Add_MouseEnter({ Invoke-SeparateWindowAction { Update-HoverControls -IsPointerOver $true } })
     $bindings.outerBorder.Add_MouseLeave({ Invoke-SeparateWindowAction { Update-HoverControls -IsPointerOver $false } })
-    $peer.Add_SizeChanged({ if (-not $script:ChangingAccountWindows) { Update-SeparateWindow; Save-SeparateWindowBounds } })
-    $peer.Add_LocationChanged({ if (-not $script:ChangingAccountWindows -and -not $script:DragOrigin) { Save-SeparateWindowBounds } })
+    # Keep rendering responsive while deferring repeated disk writes during resizing and movement.
+    $peer.Add_SizeChanged({ if (-not $script:ChangingAccountWindows) { Update-SeparateWindow; Schedule-SeparateWindowBoundsSave } })
+    $peer.Add_LocationChanged({ Schedule-SeparateWindowBoundsSave })
     $peer.Add_StateChanged({ if ($script:SeparateView.Window.WindowState -eq 'Minimized') { $script:SeparateView.Window.Hide() } })
     $peer.Add_IsVisibleChanged({ Update-WidgetClock })
     $peer.Add_Closing({
