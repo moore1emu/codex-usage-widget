@@ -15,8 +15,8 @@ trap {
     [void]$errorShell.Popup($startupMessage, 0, 'Codex Usage Widget - Error', 16)
     exit 1
 }
-# Bump this version and the README changelog together for each released update.
-$script:WidgetVersion = '1.7.2'
+# Bump this version and the separate changelog together for each released update.
+$script:WidgetVersion = '1.8.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -95,6 +95,9 @@ $script:PrimaryAlertThreshold = 0
 $script:SecondaryAlertThreshold = 0
 # Reset notifications are independently opt-in, even when low-usage warnings are disabled.
 $script:NotifyPrimaryReset = $false
+# Show upcoming reset estimates separately from notification preferences.
+$script:PrimaryResetHours = 25
+$script:ShowWeeklyResetDate = $true
 $script:AlertStates = @{}
 # Restore sent warnings so reopening below the threshold does not repeat them.
 if (Test-Path -LiteralPath $script:AlertStatePath) {
@@ -127,7 +130,7 @@ $script:CreditDisplayMode = 'Available'
 [xml] $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Codex Usage" Width="280" Height="240" WindowStyle="None"
+        Title="Codex Usage" Width="280" Height="290" WindowStyle="None"
         MinWidth="72" MinHeight="58" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResizeWithGrip"
         Topmost="True" ShowInTaskbar="False">
   <Border x:Name="OuterBorder" CornerRadius="18" Background="#F2161A23" BorderBrush="#413D4658" BorderThickness="1" Padding="18">
@@ -178,7 +181,7 @@ $script:CreditDisplayMode = 'Available'
         <ProgressBar x:Name="PrimaryBar" Grid.Row="1" Grid.ColumnSpan="2" Height="8" Minimum="0" Maximum="100"
                      Background="#293041" Foreground="#669CFF" BorderThickness="0" Value="0"/>
         <TextBlock x:Name="PrimaryReset" Grid.Row="2" Grid.ColumnSpan="2" Text="Waiting for usage data"
-                   Foreground="#8992A8" FontSize="10" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                   Foreground="#8992A8" FontSize="10" TextWrapping="Wrap" VerticalAlignment="Top" Margin="0,3,0,0"/>
       </Grid>
 
       <Grid x:Name="SecondaryArea" Grid.Row="2" Margin="0,5,0,0">
@@ -189,7 +192,7 @@ $script:CreditDisplayMode = 'Available'
         <ProgressBar x:Name="SecondaryBar" Grid.Row="1" Grid.ColumnSpan="2" Height="8" Minimum="0" Maximum="100"
                      Background="#293041" Foreground="#A97BFF" BorderThickness="0" Value="0"/>
         <TextBlock x:Name="SecondaryReset" Grid.Row="2" Grid.ColumnSpan="2" Text="Waiting for usage data"
-                   Foreground="#8992A8" FontSize="10" VerticalAlignment="Top" Margin="0,3,0,0"/>
+                   Foreground="#8992A8" FontSize="10" TextWrapping="Wrap" VerticalAlignment="Top" Margin="0,3,0,0"/>
       </Grid>
 
       <!-- Keep credits separate from quota percentages and reset countdowns. -->
@@ -470,6 +473,8 @@ $creditColorItem = $trayColorsMenu.DropDownItems.Add('Credits color...')
 $resetColorsItem = $trayColorsMenu.DropDownItems.Add('Reset to default colors')
 # Open a small settings dialog for independent low-quota warning thresholds.
 $alertSettingsItem = $trayMenu.Items.Add('Notifications...')
+# Keep reset appearance independent from reset alert settings.
+$resetDisplayItem = $trayMenu.Items.Add('Reset display...')
 # Configure credit visibility without changing usage tracking.
 $creditsMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Credit display')
 [void]$trayMenu.Items.Add($creditsMenu)
@@ -486,9 +491,9 @@ $sizeMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Window size')
 foreach ($preset in @(
     @{ Name = 'Mini'; Width = 72; Height = 72 },
     @{ Name = 'Small'; Width = 140; Height = 155 },
-    # Leave enough vertical room for the plan line when the credits row is present.
+    # Preserve Medium's dimensions while reset details take priority over optional header text.
     @{ Name = 'Medium'; Width = 190; Height = 210 },
-    @{ Name = 'Large / Default'; Width = 280; Height = 240 }
+    @{ Name = 'Large / Default'; Width = 280; Height = 290 }
 )) {
     # Store dimensions on each menu item instead of capturing the loop variable.
     $item = $sizeMenu.DropDownItems.Add(('{0} ({1} x {2})' -f $preset.Name,$preset.Width,$preset.Height))
@@ -808,6 +813,66 @@ function Show-AlertSettings {
     }
 }
 
+function Show-ResetDisplaySettings {
+    # Use native Windows controls and the same system theme as the other settings.
+    $dialog = [System.Windows.Forms.Form]::new()
+    $dialog.Text = 'Reset display'
+    $dialog.ClientSize = [System.Drawing.Size]::new(365, 220)
+    $dialog.FormBorderStyle = 'FixedDialog'
+    $dialog.StartPosition = 'CenterScreen'
+    $dialog.MaximizeBox = $false
+    $dialog.MinimizeBox = $false
+    $dialog.TopMost = $true
+    try {
+        # Explain the difference between the reported next reset and later estimates.
+        $help = [System.Windows.Forms.Label]::new()
+        $help.Text = "Show upcoming 5-hour times within this many hours.`nLater times are estimates; usage refreshes correct them."
+        $help.SetBounds(15, 12, 335, 42)
+        $dialog.Controls.Add($help)
+        # Bound the look-ahead to one week and use zero as the independent off setting.
+        $label = [System.Windows.Forms.Label]::new()
+        $label.Text = '5-hour times: hours ahead (0 = off)'
+        $label.SetBounds(15, 65, 250, 24)
+        $dialog.Controls.Add($label)
+        $hours = [System.Windows.Forms.NumericUpDown]::new()
+        $hours.Minimum = 0
+        $hours.Maximum = 168
+        $hours.Value = $script:PrimaryResetHours
+        $hours.SetBounds(275, 62, 75, 24)
+        $dialog.Controls.Add($hours)
+        # Let the weekly date remain enabled even when five-hour times are disabled.
+        $weekly = [System.Windows.Forms.CheckBox]::new()
+        $weekly.Text = 'Show weekly reset day, date, and time'
+        $weekly.Checked = $script:ShowWeeklyResetDate
+        $weekly.SetBounds(15, 108, 335, 26)
+        $dialog.Controls.Add($weekly)
+        # Save only after the user accepts; Cancel leaves existing preferences intact.
+        $save = [System.Windows.Forms.Button]::new()
+        $save.Text = 'Save'
+        $save.DialogResult = 'OK'
+        $save.SetBounds(180, 172, 80, 28)
+        $cancel = [System.Windows.Forms.Button]::new()
+        $cancel.Text = 'Cancel'
+        $cancel.DialogResult = 'Cancel'
+        $cancel.SetBounds(270, 172, 80, 28)
+        $dialog.Controls.Add($save)
+        $dialog.Controls.Add($cancel)
+        $dialog.AcceptButton = $save
+        $dialog.CancelButton = $cancel
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            # Apply display preferences immediately without changing refresh or alert behavior.
+            $script:PrimaryResetHours = [int]$hours.Value
+            $script:ShowWeeklyResetDate = $weekly.Checked
+            Save-WidgetState
+            Update-Display
+        }
+    }
+    finally {
+        # Dispose every native child control with its owning dialog.
+        $dialog.Dispose()
+    }
+}
+
 function Set-RefreshInterval {
     param([int] $Minutes)
     if ($Minutes -notin @(0, 1, 5, 15, 30)) { return }
@@ -843,6 +908,8 @@ function Save-WidgetState {
         primaryAlertThreshold = $script:PrimaryAlertThreshold
         secondaryAlertThreshold = $script:SecondaryAlertThreshold
         notifyPrimaryReset = $script:NotifyPrimaryReset
+        primaryResetHours = $script:PrimaryResetHours
+        showWeeklyResetDate = $script:ShowWeeklyResetDate
         creditDisplayMode = $script:CreditDisplayMode
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath $script:StatePath -Encoding utf8
 }
@@ -899,7 +966,7 @@ function Update-ResponsiveLayout {
         $primaryLabel.FontSize = $primaryPercent.FontSize
         $secondaryLabel.FontSize = $secondaryPercent.FontSize
         $creditsLabel.FontSize = $creditsText.FontSize
-        foreach ($control in @($primaryLabel, $secondaryLabel, $primaryPercent, $secondaryPercent, $creditsLabel, $creditsText, $primaryReset, $secondaryReset)) { $control.Measure($measureSize) }
+        foreach ($control in @($primaryLabel, $secondaryLabel, $primaryPercent, $secondaryPercent, $creditsLabel, $creditsText)) { $control.Measure($measureSize) }
         # Reserve only the widest label, shared value column, and a small readable gap.
         $labelWidth = [Math]::Max($primaryLabel.DesiredSize.Width, $secondaryLabel.DesiredSize.Width)
         $valueWidth = [Math]::Max($primaryPercent.DesiredSize.Width, $secondaryPercent.DesiredSize.Width)
@@ -907,6 +974,8 @@ function Update-ResponsiveLayout {
         $requiredWidth = $labelWidth + $valueWidth + 8
         if ($requiredWidth + 14 -le $window.ActualWidth) { break }
     }
+    # Wrap reset details at the current width and retain them before considering bars.
+    Update-ResetLabels
     # Reserve the actual reset text height, the existing 27px value row, and 5px row margins.
     $resetHeight = [Math]::Ceiling([Math]::Max($primaryReset.DesiredSize.Height, $secondaryReset.DesiredSize.Height))
     $creditHeight = if ($script:CreditsVisible) { 32 } else { 0 }
@@ -1050,7 +1119,7 @@ function Update-TrayIcon {
 }
 
 function Format-ResetCountdown {
-    param([long] $UnixSeconds, [switch] $Compact)
+    param([long] $UnixSeconds, [switch] $Compact, [switch] $CountdownOnly)
     # Use short placeholders when the badge has little room.
     if ($UnixSeconds -le 0) { if ($Compact) { return '—' }; return 'Reset time unavailable' }
     $reset = [DateTimeOffset]::FromUnixTimeSeconds($UnixSeconds).ToLocalTime()
@@ -1073,7 +1142,91 @@ function Format-ResetCountdown {
     }
     # Omit the explanatory prefix and clock time only for the compact badge.
     if ($Compact) { return $countdown }
+    # Keep the countdown separate when the responsive label supplies its own reset details.
+    if ($CountdownOnly) { return "Resets in $countdown" }
     return "Resets in $countdown · $($reset.ToString('ddd h:mm tt'))"
+}
+
+function Get-ResetDetails {
+    param($Quota, [switch] $Weekly, [switch] $NextOnly, [DateTimeOffset] $Now = [DateTimeOffset]::Now)
+    # Do not project unknown, expired, or malformed server reset timestamps.
+    $stamp = [long]0
+    if (-not $Quota -or -not [long]::TryParse([string]$Quota.resetsAt, [ref]$stamp) -or $stamp -le 0) { return '' }
+    try { $reset = [DateTimeOffset]::FromUnixTimeSeconds($stamp) }
+    catch { return '' }
+    if ($reset -le $Now) { return '' }
+    $localReset = $reset.ToLocalTime()
+    if ($Weekly) {
+        # Use the account's actual weekly date; never extrapolate a weekly period.
+        if (-not $script:ShowWeeklyResetDate) { return '' }
+        return $localReset.ToString('ddd, MMM d') + ' at ' + $localReset.ToString('h:mm tt').Replace(' ', [string][char]0xA0)
+    }
+    # Zero independently disables the five-hour clock/schedule line.
+    if ($script:PrimaryResetHours -le 0) { return '' }
+    # Keep each clock time together when wrapping, including its AM/PM suffix.
+    $text = 'at ' + $localReset.ToString('h:mm tt').Replace(' ', [string][char]0xA0)
+    if ($NextOnly) { return $text }
+    # Count hours ahead from now, always retaining the reported next reset even beyond that range.
+    $end = $Now.AddHours($script:PrimaryResetHours)
+    $period = [double]0
+    if (-not [double]::TryParse([string]$Quota.windowDurationMins, [ref]$period) -or
+        [double]::IsNaN($period) -or [double]::IsInfinity($period) -or $period -le 0) { $period = 300 }
+    # Later resets assume immediate reuse; advance elapsed UTC time so daylight-saving shifts are correct.
+    $estimated = [Collections.Generic.List[string]]::new()
+    $future = $reset.AddMinutes($period)
+    for ($index = 0; $future -le $end -and $index -lt 34; $index++) {
+        $localFuture = $future.ToLocalTime()
+        # Keep the visible schedule to clock times; estimation context stays in the tooltip.
+        $estimated.Add($localFuture.ToString('h:mm tt').Replace(' ', [string][char]0xA0))
+        $future = $future.AddMinutes($period)
+    }
+    if ($estimated.Count) { $text += ', ' + ($estimated -join ', ') }
+    return $text
+}
+
+function Update-ResetLabels {
+    # Keep enough padding for either responsive border setting and measure real wrapped text.
+    $availableWidth = [Math]::Max(1, $window.ActualWidth - 22)
+    $bounded = [Windows.Size]::new($availableWidth, [double]::PositiveInfinity)
+    $unbounded = [Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity)
+    # Preserve full schedules first, then actual next resets, then countdowns before the numeric badge.
+    foreach ($detailLevel in @('Full', 'Next', 'Countdown')) {
+        foreach ($entry in @(
+            @{ Control = $primaryReset; Quota = $script:Usage.primary; Weekly = $false; Missing = 'No 5-hour window returned' },
+            @{ Control = $secondaryReset; Quota = $script:Usage.secondary; Weekly = $true; Missing = 'No weekly window returned' }
+        )) {
+            $control = $entry.Control
+            $quota = $entry.Quota
+            $countdown = if ($quota -and $null -ne $quota.usedPercent) { Format-ResetCountdown -UnixSeconds ([long]$quota.resetsAt) -CountdownOnly } else { $entry.Missing }
+            # Shorten only the countdown when necessary; the reset details get their own wrapped space.
+            $control.MaxWidth = [double]::PositiveInfinity
+            $control.Text = $countdown
+            $control.Measure($unbounded)
+            if ($quota -and $control.DesiredSize.Width -gt $availableWidth) {
+                $countdown = 'Resets in ' + (Format-ResetCountdown -UnixSeconds ([long]$quota.resetsAt) -Compact)
+            }
+            $details = if ($detailLevel -ne 'Countdown' -and $quota -and $null -ne $quota.usedPercent) {
+                Get-ResetDetails -Quota $quota -Weekly:$entry.Weekly -NextOnly:($detailLevel -eq 'Next')
+            } else { '' }
+            # Put time/date beside the countdown only when the entire line fits.
+            $control.Text = if ($details) { $countdown + ' · ' + $details } else { $countdown }
+            $control.Measure($unbounded)
+            if ($details -and $control.DesiredSize.Width -gt $availableWidth) { $control.Text = $countdown + [Environment]::NewLine + $details }
+            $control.MaxWidth = $availableWidth
+            $control.Measure($bounded)
+            # Preserve the complete schedule on hover even after shrinking its visible representation.
+            $fullDetails = if ($quota -and $null -ne $quota.usedPercent) { Get-ResetDetails -Quota $quota -Weekly:$entry.Weekly } else { '' }
+            $control.ToolTip = $countdown + $(if ($fullDetails) { [Environment]::NewLine + $fullDetails } else { '' })
+            # Explain estimates on hover without repeating labels in the visible clock list.
+            if ($fullDetails -and -not $entry.Weekly) {
+                $control.ToolTip += [Environment]::NewLine + 'First time: reported next reset. Later times: estimates assuming immediate reuse.'
+            }
+        }
+        # Equal star rows must both fit the taller reset block before adding bars or header controls.
+        $resetHeight = [Math]::Ceiling([Math]::Max($primaryReset.DesiredSize.Height, $secondaryReset.DesiredSize.Height))
+        $creditHeight = if ($script:CreditsVisible) { 32 } else { 0 }
+        if (2 * (27 + 5 + $resetHeight) + $creditHeight + 14 -le $window.ActualHeight) { break }
+    }
 }
 
 function Update-Display {
@@ -1135,26 +1288,15 @@ function Update-Display {
     # Update the compact countdowns each second and expose the full reset time on hover.
     $compactPrimaryReset.Text = if ($primary) { Format-ResetCountdown -UnixSeconds ([long] $primary.resetsAt) -Compact } else { '—' }
     $compactSecondaryReset.Text = if ($secondary) { Format-ResetCountdown -UnixSeconds ([long] $secondary.resetsAt) -Compact } else { '—' }
-    $compactPrimaryPercent.ToolTip = $primaryReset.Text
-    $compactSecondaryPercent.ToolTip = $secondaryReset.Text
-    # Preserve exact reset details on hover while shortening the intermediate rows.
-    $primaryReset.ToolTip = $primaryReset.Text
-    $secondaryReset.ToolTip = $secondaryReset.Text
-    # Keep full reset details until their actual text width exceeds the available row.
-    $resetMeasure = [System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity)
-    $primaryReset.Measure($resetMeasure)
-    $secondaryReset.Measure($resetMeasure)
-    if ([Math]::Max($primaryReset.DesiredSize.Width, $secondaryReset.DesiredSize.Width) -gt ($window.ActualWidth - 22)) {
-        $primaryReset.Text = if ($primary) { 'Resets in ' + (Format-ResetCountdown -UnixSeconds ([long]$primary.resetsAt) -Compact) } else { 'Reset unavailable' }
-        $secondaryReset.Text = if ($secondary) { 'Resets in ' + (Format-ResetCountdown -UnixSeconds ([long]$secondary.resetsAt) -Compact) } else { 'Reset unavailable' }
-    }
-    # Keep credit information accessible when compact labels no longer fit.
-    if ($script:CreditsVisible) {
-        $compactPrimaryPercent.ToolTip = $primaryReset.Text + [Environment]::NewLine + $creditLabel
-        $compactSecondaryPercent.ToolTip = $secondaryReset.Text + [Environment]::NewLine + $creditLabel
-    }
     # Recheck fit as countdown text changes, including after a reset.
     Update-ResponsiveLayout
+    # Keep full reset schedules accessible from both compact percentages after the layout pass.
+    $compactPrimaryPercent.ToolTip = $primaryReset.ToolTip
+    $compactSecondaryPercent.ToolTip = $secondaryReset.ToolTip
+    if ($script:CreditsVisible) {
+        $compactPrimaryPercent.ToolTip += [Environment]::NewLine + $creditLabel
+        $compactSecondaryPercent.ToolTip += [Environment]::NewLine + $creditLabel
+    }
     # Apply status after ordinary tooltips are refreshed so errors remain visible at every size.
     Update-RefreshStatus
 }
@@ -1303,6 +1445,11 @@ if (Test-Path -LiteralPath $script:StatePath) {
         if ($null -ne $state.secondaryAlertThreshold -and $state.secondaryAlertThreshold -ge 0 -and $state.secondaryAlertThreshold -le 100) { $script:SecondaryAlertThreshold = [int]$state.secondaryAlertThreshold }
         # Older settings keep reset notifications off until explicitly enabled.
         if ($state.notifyPrimaryReset -is [bool]) { $script:NotifyPrimaryReset = $state.notifyPrimaryReset }
+        # Older preferences adopt the new display defaults; reject invalid or oversized counts.
+        if ($state.primaryResetHours -is [long] -or $state.primaryResetHours -is [int]) {
+            if ($state.primaryResetHours -ge 0 -and $state.primaryResetHours -le 168) { $script:PrimaryResetHours = [int]$state.primaryResetHours }
+        }
+        if ($state.showWeeklyResetDate -is [bool]) { $script:ShowWeeklyResetDate = $state.showWeeklyResetDate }
         # Keep the automatic credit display preference across launches.
         # Older settings adopt the new available-credit default.
         if ($state.creditDisplayMode -in @('Available', 'Always', 'Off')) { $script:CreditDisplayMode = $state.creditDisplayMode }
@@ -1345,7 +1492,7 @@ $ultraCompactPanel.Add_MouseLeftButtonDown({
     if ($_.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
         if ($_.ClickCount -eq 2) {
             $window.Width = 280
-            $window.Height = 240
+            $window.Height = 290
             Update-ResponsiveLayout
         }
         elseif ($window.WindowState -eq [System.Windows.WindowState]::Normal) {
@@ -1398,6 +1545,8 @@ $secondaryColorItem.Add_Click({ Select-QuotaColor -Quota Secondary })
 $creditColorItem.Add_Click({ Select-QuotaColor -Quota Credits })
 # Open the threshold settings from the notification-area menu.
 $alertSettingsItem.Add_Click({ Show-AlertSettings })
+# Change the independent reset display preferences from the tray menu.
+$resetDisplayItem.Add_Click({ Show-ResetDisplaySettings })
 # Update the optional credit labels immediately when the user toggles them.
 foreach ($item in $script:CreditMenuItems) {
     $item.Add_Click({

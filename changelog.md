@@ -2,6 +2,15 @@
 
 [Back to README](README.md)
 
+## 1.8.0 — October 1, 2026
+
+- Added **Reset display...** with independently saved 5-hour hours-ahead (default 25; 0 = off; maximum 168) and weekly date (default on) settings.
+- Show a simple **at 1:22 PM, 6:22 PM...** list using the reported next reset and later estimated times, recalculated on each usage refresh. Keep estimation context in hover text and settings, and handle daylight-saving changes using elapsed time.
+- Show the weekly day, date, and time without repeating “Resets on.”
+- Place reset times/dates beside countdowns when they fit, below them when narrow. Preserve reset details before bars; shorten to the actual next reset and then the countdown when height runs out. Full schedules remain available on hover.
+- Increased Large / Default to 280 × 290. Mini, Small, Medium, and previously saved custom sizes retain their dimensions.
+- Refreshed the README screenshots and retained the existing refresh intervals and notification rules.
+
 ## Documentation update — September 30, 2026
 
 - Simplified the README to quick setup, essential controls, and screenshots.

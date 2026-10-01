@@ -2,7 +2,7 @@
 
 A small Windows desktop and tray widget for Codex **5-hour and weekly usage left**, reset countdowns, credits, and notifications.
 
-**Version 1.7.2** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 1.8.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -25,6 +25,8 @@ Drag to move or resize. Use **↻** to refresh, **◉ / ○** for always on top,
 ## Settings
 
 Right-click the tray icon to open the settings menu. Choose **Notifications...** for low-quota warnings and the 5-hour reset alert. **0 disables a threshold.** Reset alerts require weekly quota above 0%.
+
+**Reset display...** controls upcoming 5-hour times (25 hours ahead by default; 0 = off) and the separate weekly date. Later times are estimates, updated with each usage refresh. Details sit beside the countdown when wide and underneath when narrow.
 
 | Settings menu | Notification settings |
 | --- | --- |

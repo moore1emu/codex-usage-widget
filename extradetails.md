@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 1.7.2.
+This guide covers Codex Usage Widget 1.8.0.
 
 ## Requirements
 
@@ -49,6 +49,14 @@ Its last screen position, size, and always-on-top choice are stored per computer
 
 Reset countdowns sit directly beneath their usage bars. Percentages and credit totals share a value column and align by their first digit. The header title, status dot, and window buttons share one aligned row.
 
+**Reset display...** independently controls the 5-hour clock/schedule and weekly date. The 5-hour setting accepts 0–168 hours ahead, defaults to 25, and uses **0 to turn that display off**. The weekly checkbox defaults to on. Turning either display off keeps its countdown and does not change notification settings. Save applies these preferences immediately and stores them on this computer.
+
+The next reset uses the actual timestamp returned by Codex. Subsequent times assume immediate reuse after each window ends; they are not guaranteed appointments. The visible line is simply **at 1:22 PM, 6:22 PM...**, with estimation context in hover text and settings. A new five-hour window starts with your first request after the previous window ends, so a pause in use can shift later reset times. Every successful usage refresh rebuilds the schedule from the latest server timestamp, and an expired timestamp stops producing estimates until a fresh reset is reported. The selected refresh interval and manual Refresh remain unchanged. See [OpenAI's usage guide](https://help.openai.com/en/articles/20001516-managing-usage-with-gpt-6-astra-in-work-and-codex).
+
+Hours ahead are counted from the current time. The actual next reset remains visible even if it falls beyond a short look-ahead; later estimates must fall within the selected range. Times use this computer's local time zone. Projections advance by the reported window duration, using five hours when it is unavailable, and account for daylight-saving changes. The weekly line uses the actual reset day, date, and time without projecting future weeks or repeating “Resets on.”
+
+Time/date details sit beside their countdown when the complete line fits, then move underneath and wrap as the window narrows. As height decreases, bars and header/footer details yield space to the reset information. If the full schedule no longer fits, only the actual next reset remains, then only the countdown. Hover over a reset label or compact percentage to see the full enabled schedule. At the smallest sizes, numbers remain the priority.
+
 - **Credit display → When credits exist** is the default: positive or unlimited credits appear even when subscription quota remains. Choose **Always show** to keep the readout visible for zero or unavailable balances, or **Off** to hide it. Balances are rounded to whole credits for display; the account balance itself is unchanged. The Credits row uses the same white-label/colored-value alignment as the quota rows. The default credit color is muted blue-green. Unknown balances use a dash and unlimited balances use ∞ in the smallest view. These are usage credits, not free quota-reset grants.
 - Resizing measures the readouts and available space. It removes header/footer details first, then bars, while retaining labeled values and reset countdowns. Only when labeled rows no longer fit does it switch to the numeric badge. With credits visible, that badge keeps three numeric readouts and removes captions and countdowns as necessary to fit. Numeric font sizes also adapt to the minimum window size. Drag the background to move the intermediate layout.
 - **Notifications...** opens separate 5-hour and weekly percentage thresholds. Both default to **0 (off)**. A threshold of 20 warns when the remaining percentage is below 20, including zero. Checks run after successful usage refreshes, so the refresh interval controls warning latency. An already-low quota warns on the first successful check unless its saved notification state says that warning was already sent; relaunching does not repeat it.
@@ -66,8 +74,8 @@ Choose **Window size** in the tray menu for four distinct display sizes:
 | --- | --- | --- |
 | Mini | 72 × 72 | Numeric badge |
 | Small | 140 × 155 | Labeled values and reset countdowns |
-| Medium | 190 × 210 | Usage bars, compact header controls, and plan line, including with credits |
-| Large / Default | 280 × 240 | Full details, plan line, and footer |
+| Medium | 190 × 210 | Labeled values and reset details; bars/header appear as space permits |
+| Large / Default | 280 × 290 | Full reset details, bars, plan line, and footer |
 
 Dimensions are Windows logical pixels. Large and Default are now one preset. Presets save immediately and restore when reopening; manually resized dimensions still save on normal exit. Existing saved sizes remain unchanged until you choose a preset. Double-clicking the compact badge returns to the new Large / Default size. Width transitions measure the text and controls, using the center gap before shortening labels or hiding details.
 
