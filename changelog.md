@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.1.5 — October 1, 2026
+
+- Defer settings status/layout updates while a dropdown is open so General and Shared lists stay open and preserve draft selections. Resume nickname, connection status and lock updates after the list closes; usage refresh continues independently.
+- Add a regression check for every settings dropdown across actual status timer ticks, deferred account-name updates, and Shared locking/unlocking.
+
 ## 2.1.4 — October 1, 2026
 
 - Keep compact refresh and hover controls above account cards so they remain clickable in every shared layout and both separate windows.

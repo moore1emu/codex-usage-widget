@@ -378,6 +378,10 @@ function Show-WidgetSettings {
     $statusTimer = [Windows.Forms.Timer]::new()
     $statusTimer.Interval = 1000
     $updateStatus = {
+        # Defer status-driven layout and selector changes while any native dropdown is open.
+        foreach ($control in $controls.Values) {
+            if ($control -is [Windows.Forms.ComboBox] -and $control.DroppedDown) { return }
+        }
         # Refresh imported nicknames without changing the draft's account selection.
         $accountIndex = $controls.Account.SelectedIndex
         $names = @($script:LocalDisplayName,$script:RemoteDisplayName)
