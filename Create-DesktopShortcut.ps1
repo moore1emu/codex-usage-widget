@@ -38,7 +38,10 @@ try {
     if (-not (Test-Path -LiteralPath $DestinationDirectory -PathType Container)) { throw 'The shortcut destination folder does not exist.' }
     # Give synced desktop shortcuts distinct names while keeping local desktop names simple.
     $isOneDrive = Test-OneDriveDestination $DestinationDirectory
-    $shortcutName = if ($isOneDrive) { 'Codex Usage - ' + [Environment]::MachineName + '.lnk' } else { 'Codex Usage.lnk' }
+    # Read the full local hostname instead of the shortened Windows computer name.
+    $computerName = [Environment]::MachineName
+    try { $hostname = [Net.Dns]::GetHostName(); if ($hostname) { $computerName = $hostname } } catch { }
+    $shortcutName = if ($isOneDrive) { 'Codex Usage - ' + $computerName + '.lnk' } else { 'Codex Usage.lnk' }
     $shortcutPath = Join-Path $DestinationDirectory $shortcutName
     # Refuse to overwrite an unrelated existing shortcut with the same name.
     $shell = New-Object -ComObject WScript.Shell
@@ -55,9 +58,11 @@ try {
     $shortcut.IconLocation = $iconPath + ',0'
     $shortcut.Description = 'Open the Codex Usage widget.'
     $shortcut.Save()
-    # Retire the old generic name only when it points to this exact computer's launcher.
-    $legacyPath = Join-Path $DestinationDirectory 'Codex Usage.lnk'
-    if ($isOneDrive -and (Test-Path -LiteralPath $legacyPath -PathType Leaf)) {
+    # Retire generic and shortened names only when they point to this exact local launcher.
+    $legacyNames = @('Codex Usage.lnk', ('Codex Usage - ' + [Environment]::MachineName + '.lnk'))
+    foreach ($legacyName in $legacyNames) {
+        $legacyPath = Join-Path $DestinationDirectory $legacyName
+        if (-not $isOneDrive -or $legacyPath -eq $shortcutPath -or -not (Test-Path -LiteralPath $legacyPath -PathType Leaf)) { continue }
         $legacy = $shell.CreateShortcut($legacyPath)
         try {
             if ($legacy.TargetPath -eq $targetPath -and $legacy.Arguments -eq $arguments) {

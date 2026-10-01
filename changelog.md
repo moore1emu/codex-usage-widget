@@ -2,6 +2,15 @@
 
 [Back to README](README.md)
 
+## 2.0.2 — October 1, 2026
+
+- Use the full local hostname for OneDrive desktop shortcuts and retire owned shortcuts using the shortened Windows name.
+- Hide permanent compact refresh before reset countdowns; keep refresh available on hover and in the tray menu.
+- Add Apply to settings so changes can be saved and previewed without closing the dialog. Cancel preserves applied changes and discards later drafts.
+- Consolidate settings into General and Shared, with independent colors, credit visibility, reset displays and notifications. Enable Shared locks/unlocks its settings; disabling preserves its preferences while stopping file operations, second-account display and alerts.
+- Add fresh-only shared notifications with account labels, separate persisted duplicate suppression and the same weekly gating for reset alerts.
+- Rename the palette to Fuchsia / mauve / mist and migrate saved selections of its previous label. Update documentation and settings screenshots.
+
 ## 2.0.1 — October 1, 2026
 
 - Add the computer name to desktop shortcuts created inside OneDrive destinations, preventing different computers from overwriting the same synced shortcut. Local destinations retain the plain Codex Usage name.

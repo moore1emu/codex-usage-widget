@@ -4,6 +4,7 @@
 # Keep runtime settings, diagnostics, and captured usage out of the repository.
 widget-state.json
 warning-state.json
+shared-warning-state.json
 startup-error.log
 *.log
 usage.json

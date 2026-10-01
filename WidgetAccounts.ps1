@@ -61,16 +61,22 @@ function Initialize-AccountViews {
 }
 
 function Render-AccountCard {
-    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height)
+    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote)
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
     $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; Topmost=$true }
-    $original = @{ Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard }
+    $original = @{ Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
         $script:RenderingAccountCard = $true
         $script:Usage = if ($Snapshot) { $Snapshot } else { @{primary=$null;secondary=$null;credits=$null} }
         $script:RefreshError = $null
+        # Each imported card uses its own display preferences while local rendering stays intact.
+        if ($Remote) {
+            $script:CreditDisplayMode = $script:SharedCreditDisplayMode
+            $script:PrimaryResetHours = $script:SharedPrimaryResetHours
+            $script:ShowWeeklyResetDate = $script:SharedShowWeeklyResetDate
+        }
         $colors = $script:ColorSchemes[$Scheme]
         foreach ($control in @($primaryPercent,$primaryBar,$compactPrimaryPercent)) { $control.Foreground = $colors[0] }
         foreach ($control in @($secondaryPercent,$secondaryBar,$compactSecondaryPercent)) { $control.Foreground = $colors[1] }
@@ -91,9 +97,9 @@ function Render-AccountCard {
 function Update-AccountViews {
     # Leave the established single-account layout intact until importing is explicitly enabled.
     if (-not $script:AccountsHost -or $script:RenderingAccountCard) { return }
-    $script:AccountsHost.Visibility = if ($script:ReadUsageEnabled) { 'Visible' } else { 'Collapsed' }
-    $window.MinWidth = if ($script:ReadUsageEnabled -and $script:AccountLayout -eq 'Side by side') { 150 } else { 72 }
-    if (-not $script:ReadUsageEnabled) { return }
+    $script:AccountsHost.Visibility = if ($script:SharedEnabled -and $script:ReadUsageEnabled) { 'Visible' } else { 'Collapsed' }
+    $window.MinWidth = if ($script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Side by side') { 150 } else { 72 }
+    if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled) { return }
     foreach ($control in @($primaryArea,$secondaryArea,$creditsArea,$ultraCompactPanel,$footerArea)) { $control.Visibility = 'Collapsed' }
     # Reserve only the shared toolbar; each account owns its name and freshness label.
     $outerBorder.Padding = [Windows.Thickness]::new(6)
@@ -150,7 +156,7 @@ function Update-AccountViews {
         $status = if ($key -eq 'Remote') { Get-SharingStatus Source } elseif ($script:RefreshError) { 'Refresh failed · last reading retained' } else { 'Local account · ' + $(if ($snapshot) { 'updated ' + [DateTimeOffset]::FromUnixTimeSeconds([long]$snapshot.fetchedAt).ToLocalTime().ToString('h:mm tt') } else { 'waiting' }) }
         if ($key -eq 'Remote' -and $script:ReadError) { $status = 'File unavailable · ' + $status }
         $scheme = if ($key -eq 'Local') { $script:LocalScheme } else { $script:RemoteScheme }
-        Render-AccountCard -Card $card -Snapshot $snapshot -Name $name -Status ($plan + $status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight - $(if ($showName) { 36 } else { 0 })))
+        Render-AccountCard -Remote:($key -eq 'Remote') -Card $card -Snapshot $snapshot -Name $name -Status ($plan + $status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight - $(if ($showName) { 36 } else { 0 })))
     }
     Update-HoverControls
 }
@@ -159,7 +165,7 @@ function Set-WidgetPreset {
     param([ValidateSet('Mini','Small','Medium','Large / Default')] [string] $Name)
     # Preserve the old single-account presets and use dimensions suitable for each two-account layout.
     $sizes = @(@(72,72),@(140,155),@(190,210),@(280,290))
-    if ($script:ReadUsageEnabled) {
+    if ($script:SharedEnabled -and $script:ReadUsageEnabled) {
         $sizes = switch ($script:AccountLayout) {
             'Side by side' { @(@(150,72),@(300,180),@(400,250),@(560,330)) }
             'Stacked' { @(@(72,144),@(180,320),@(240,470),@(300,600)) }

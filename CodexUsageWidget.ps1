@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.0.1'
+$script:WidgetVersion = '2.0.2'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -624,6 +624,7 @@ function Get-PrimaryResetNotification {
 }
 
 function Show-UsageWarnings {
+    param([string] $AccountName)
     # Check only successful account snapshots; missing quota data cannot trigger alerts.
     if (-not $script:Usage) { return }
     $messages = @()
@@ -667,6 +668,8 @@ function Show-UsageWarnings {
         Save-WarningState
         $title = if ($resetMessage -and $hasLowWarning) { 'Codex usage update' } elseif ($resetMessage) { '5-hour window reset' } else { 'Codex usage running low' }
         $icon = if ($hasLowWarning) { [System.Windows.Forms.ToolTipIcon]::Warning } else { [System.Windows.Forms.ToolTipIcon]::Info }
+        # Identify imported-account alerts without changing the local tray readings.
+        if ($AccountName) { $title = $AccountName + ' - ' + $title }
         $trayIcon.ShowBalloonTip(8000, $title, ($messages -join [Environment]::NewLine), $icon)
     }
     else {
@@ -676,6 +679,8 @@ function Show-UsageWarnings {
 }
 
 function Save-WarningState {
+    # Shared alerts persist their own source-aware history before a popup is displayed.
+    if ($script:ProcessingSharedWarnings) { Save-SharedWarnings; return }
     # Store only changes to keep polling from producing needless disk writes.
     if (-not $script:AlertStatePath) { return }
     $json = $script:AlertStates | ConvertTo-Json -Compress -Depth 4
@@ -728,6 +733,13 @@ function Save-WidgetState {
         showWeeklyResetDate = $script:ShowWeeklyResetDate
         creditDisplayMode = $script:CreditDisplayMode
         # Keep file connections and aliases on this computer, outside the synchronized project.
+        sharedEnabled = $script:SharedEnabled
+        sharedCreditDisplayMode = $script:SharedCreditDisplayMode
+        sharedPrimaryResetHours = $script:SharedPrimaryResetHours
+        sharedShowWeeklyResetDate = $script:SharedShowWeeklyResetDate
+        sharedPrimaryAlertThreshold = $script:SharedPrimaryAlertThreshold
+        sharedSecondaryAlertThreshold = $script:SharedSecondaryAlertThreshold
+        sharedNotifyPrimaryReset = $script:SharedNotifyPrimaryReset
         writeUsageEnabled = $script:WriteUsageEnabled
         readUsageEnabled = $script:ReadUsageEnabled
         usageOutputPath = $script:UsageOutputPath
@@ -856,10 +868,8 @@ function Update-ResponsiveLayout {
             if (($numericHeight -le ($window.ActualHeight - 14) -and $numericWidth -le ($window.ActualWidth - 14)) -or $numberSize -eq 10) { break }
             $numberSize--
         }
-        # Keep refresh above the numeric badge until even its numeric rows leave no room.
-        $refreshHeight = if (-not $script:RenderingAccountCard -and $numericHeight + 34 -le $window.ActualHeight) { 20 } else { 0 }
-        $compactRefreshButton.Visibility = if ($refreshHeight) { 'Visible' } else { 'Collapsed' }
-        $ultraCompactPanel.Margin = [System.Windows.Thickness]::new(0,$refreshHeight,0,0)
+        # Reserve the reset countdowns before deciding whether refresh has spare space.
+        $refreshHeight = 0
         # Measure actual text so countdowns remain visible for as long as they fit.
         $compactPrimaryReset.Visibility = 'Visible'
         $compactSecondaryReset.Visibility = 'Visible'
@@ -885,6 +895,11 @@ function Update-ResponsiveLayout {
         $showResets = ($window.ActualHeight -ge (2 * $rowHeight + $creditHeight + 14 + $refreshHeight)) -and ($window.ActualWidth -ge ($resetWidth + 14))
         $compactPrimaryReset.Visibility = if ($showResets) { 'Visible' } else { 'Collapsed' }
         $compactSecondaryReset.Visibility = if ($showResets) { 'Visible' } else { 'Collapsed' }
+        # Show a permanent refresh button only after both countdowns and the credit row fit.
+        $refreshHeight = if (-not $script:RenderingAccountCard -and $showResets -and
+            $window.ActualHeight -ge (2 * $rowHeight + $creditHeight + 14 + 20)) { 20 } else { 0 }
+        $compactRefreshButton.Visibility = if ($refreshHeight) { 'Visible' } else { 'Collapsed' }
+        $ultraCompactPanel.Margin = [System.Windows.Thickness]::new(0,$refreshHeight,0,0)
         # Refresh hover controls after resizing without moving the numeric layout.
         Update-HoverControls
         if (-not $script:RenderingAccountCard) { Update-AccountViews }
@@ -1314,6 +1329,17 @@ if (Test-Path -LiteralPath $script:StatePath) {
         foreach ($key in @('usageOutputPath','usageInputPath')) {
             if ($state.$key -is [string]) { Set-Variable -Scope Script -Name $key -Value $state.$key }
         }
+        # Older shared connections remain enabled; new installations start with the master lock off.
+        $script:SharedEnabled = $script:WriteUsageEnabled -or $script:ReadUsageEnabled
+        if ($state.sharedEnabled -is [bool]) { $script:SharedEnabled = $state.sharedEnabled }
+        if ($state.sharedCreditDisplayMode -in @('Available','Always','Off')) { $script:SharedCreditDisplayMode = $state.sharedCreditDisplayMode }
+        foreach ($key in @('sharedShowWeeklyResetDate','sharedNotifyPrimaryReset')) {
+            if ($state.$key -is [bool]) { Set-Variable -Scope Script -Name $key -Value $state.$key }
+        }
+        foreach ($key in @('sharedPrimaryResetHours','sharedPrimaryAlertThreshold','sharedSecondaryAlertThreshold')) {
+            $maximum = if ($key -eq 'sharedPrimaryResetHours') { 168 } else { 100 }
+            if (($state.$key -is [int] -or $state.$key -is [long]) -and $state.$key -ge 0 -and $state.$key -le $maximum) { Set-Variable -Scope Script -Name $key -Value ([int]$state.$key) }
+        }
         # Bound the cleaned nickname rather than the original text containing control characters.
         if ($state.localDisplayName -is [string] -and $state.localDisplayName.Trim()) {
             $savedName = ($state.localDisplayName -replace '[\p{C}]','').Trim()
@@ -1325,6 +1351,10 @@ if (Test-Path -LiteralPath $script:StatePath) {
         }
         if ($state.accountLayout -in @('Side by side','Stacked','Account picker')) { $script:AccountLayout = $state.accountLayout }
         if ($state.selectedAccount -in @('Local','Remote')) { $script:SelectedAccount = $state.selectedAccount }
+        # Preserve palette selections saved before the Fuchsia label was shortened.
+        foreach ($key in @('localScheme','remoteScheme')) {
+            if ($state.$key -eq 'Muted fuchsia / mauve / mist') { $state.$key = 'Fuchsia / mauve / mist' }
+        }
         if ($state.localScheme -and $script:ColorSchemes.Contains([string]$state.localScheme)) { $script:LocalScheme = $state.localScheme }
         if ($state.remoteScheme -and $script:ColorSchemes.Contains([string]$state.remoteScheme)) { $script:RemoteScheme = $state.remoteScheme }
         if ($null -ne $state.left -and $null -ne $state.top) {
@@ -1351,6 +1381,7 @@ else {
 }
 # Apply a coordinated palette and create the optional peer views after restoring local preferences.
 Set-AccountScheme $script:LocalScheme
+Initialize-SharedWarnings
 Initialize-AccountViews
 
 $dragArea.Add_MouseLeftButtonDown({
