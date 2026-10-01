@@ -61,6 +61,8 @@ function Set-SettingsHelp {
     }
 }
 function Show-WidgetSettings {
+    # Focus the existing settings window instead of opening competing drafts.
+    if ($script:SettingsForm -and -not $script:SettingsForm.IsDisposed) { [void]$script:SettingsForm.Activate(); return }
     # Keep all settings in one native Windows dialog that follows the system app theme.
     $dialog = [Windows.Forms.Form]::new()
     $dialog.Text = "Codex Usage v$script:WidgetVersion · Settings"
@@ -123,9 +125,11 @@ function Show-WidgetSettings {
     Add-SettingsRow $tables.Shared '' $controls.SharedEnabled
     $controls.SharedLock = Add-SettingsNote $tables.Shared ''
     # Keep second-account layout and palette controls beside their shared-file connections.
-    $controls.Layout = New-SettingsChoice @('Side by side','Stacked','Account picker') $script:AccountLayout
+    $controls.Layout = New-SettingsChoice @('Side by side','Stacked','Account picker','Separate windows') $script:AccountLayout
     Add-SettingsRow $tables.Shared 'Account layout' $controls.Layout
-    $controls.Account = New-SettingsChoice @('This computer','Shared computer') $(if ($script:SelectedAccount -eq 'Remote') { 'Shared computer' } else { 'This computer' })
+    # Keep the choice tied to its account index even when both accounts have the same nickname.
+    $controls.Account = New-SettingsChoice @($script:LocalDisplayName,$script:RemoteDisplayName) $script:LocalDisplayName
+    $controls.Account.SelectedIndex = if ($script:SelectedAccount -eq 'Remote') { 1 } else { 0 }
     Add-SettingsRow $tables.Shared 'Picker account' $controls.Account
     $controls.LocalScheme = New-SettingsChoice @($script:ColorSchemes.Keys) $script:LocalScheme
     $controls.RemoteScheme = New-SettingsChoice @($script:ColorSchemes.Keys) $script:RemoteScheme
@@ -299,10 +303,8 @@ function Show-WidgetSettings {
     $footer.Padding = [Windows.Forms.Padding]::new(8)
     $save = [Windows.Forms.Button]::new()
     $save.Text = 'Save'
-    $save.DialogResult = 'OK'
     $cancel = [Windows.Forms.Button]::new()
     $cancel.Text = 'Cancel'
-    $cancel.DialogResult = 'Cancel'
     # Apply commits changes without setting a dialog result or closing the settings window.
     $apply = [Windows.Forms.Button]::new()
     $apply.Text = 'Apply'
@@ -320,6 +322,13 @@ function Show-WidgetSettings {
     $statusTimer = [Windows.Forms.Timer]::new()
     $statusTimer.Interval = 1000
     $updateStatus = {
+        # Refresh imported nicknames without changing the draft's account selection.
+        $accountIndex = $controls.Account.SelectedIndex
+        $names = @($script:LocalDisplayName,$script:RemoteDisplayName)
+        for ($index = 0; $index -lt 2; $index++) {
+            if ([string]$controls.Account.Items[$index] -ne $names[$index]) { $controls.Account.Items[$index] = $names[$index] }
+        }
+        $controls.Account.SelectedIndex = $accountIndex
         # Show draft cadence alongside live operation status while the dialog is open.
         # Lock every Shared setting except the master switch, retaining all selections.
         $sharedOn = $controls.SharedEnabled.Checked
@@ -345,18 +354,26 @@ function Show-WidgetSettings {
     $statusTimer.Add_Tick($updateStatus)
     & $updateStatus
     $statusTimer.Start()
+    # Save validates before closing; Cancel and the title-bar X discard only unapplied drafts.
+    $save.Add_Click({
+        try { & $applySettings; $dialog.Close() }
+        catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'Unable to save settings') }
+    })
+    $cancel.Add_Click({ $dialog.Close() })
+    # A nested dispatcher keeps this draft's callbacks alive without disabling either widget window.
+    Add-Type -AssemblyName WindowsFormsIntegration
+    [Windows.Forms.Integration.WindowsFormsHost]::EnableWindowsFormsInterop()
+    $settingsFrame = [Windows.Threading.DispatcherFrame]::new()
+    $dialog.Add_FormClosed({ $settingsFrame.Continue = $false })
+    $script:SettingsForm = $dialog
     try {
-        while ($dialog.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
-            try {
-                & $applySettings
-                break
-            } catch {
-                # Keep draft choices available for correction instead of silently discarding them.
-                [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'Unable to save settings')
-                $dialog.DialogResult = 'None'
-            }
-        }
-    } finally { $statusTimer.Stop(); $statusTimer.Dispose(); $settingsToolTip.Dispose(); $dialog.Dispose() }
+        $dialog.Show()
+        [Windows.Threading.Dispatcher]::PushFrame($settingsFrame)
+    } finally {
+        # Release all help and status resources when Settings or the application closes.
+        $script:SettingsForm = $null
+        $statusTimer.Stop(); $statusTimer.Dispose(); $settingsToolTip.Dispose(); $dialog.Dispose()
+    }
 }
 
 function Update-SharingTimer {

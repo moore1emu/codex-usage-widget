@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.0.3.
+This guide covers Codex Usage Widget 2.1.0.
 
 ## Requirements
 
@@ -87,6 +87,8 @@ Open **Settings...** from the tray menu. **General** configures this computer's 
 
 Explanations appear as hover tooltips on the related controls and labels; live lock state, file-operation status and source age remain visible.
 
+Settings remains open without blocking either desktop window. Account picker labels follow this computer's saved display name and the imported JSON nickname. The inline selector uses the widget's dark theme. Account headings shrink and shorten before disappearing; full names remain on hover.
+
 **Apply** validates, saves, and displays changes without closing Settings. **Save** does the same and closes. **Cancel** discards unapplied edits; it does not undo changes already applied.
 
 **Enable Shared** unlocks its controls. Turning it off and applying stops file writing/reading, hides the second account, stops its alerts and file timers, and preserves all connection and account choices. The switch remains available while the rest of Shared is locked. Writing and reading have independent switches within the enabled tab.
@@ -108,7 +110,7 @@ Sharing is opt-in and configured separately on each computer under **Settings...
 2. On Computer A, turn on **Enable Shared**, enable **Write my usage to JSON**, give it a nickname, and choose a new `account-a.json` output file. Save to create its first file after a successful local reading.
 3. On Computer B, enable Shared and do the same with a different nickname and `account-b.json`.
 4. After the files sync, enable **Read the shared computer's JSON** on A and select B's file; on B select A's file. Paths may differ between computers. Never select the same file as input and output.
-5. On **Shared**, select Side by side, Stacked, or Account picker and a palette for the second account. Use **General** for the local palette. Then choose a window preset if needed.
+5. On **Shared**, select Side by side, Stacked, Account picker, or Separate windows and a palette for the second account. Use **General** for the local palette. Then choose a window preset if needed.
 
 | Connection | Computer A | Computer B |
 | --- | --- | --- |
@@ -122,6 +124,10 @@ Writing uses an atomic file replacement. Existing output files must belong to th
 Sharing shows separate last-write/read statuses and the imported usage's age. A recent file read does not imply recent usage: if the shared computer/widget stops, its numbers remain visible and become **stale** after twice its reported refresh interval, with a two-minute minimum. Manual sources use that minimum. OneDrive delivery adds its own delay. Missing, malformed, or older files retain the last valid reading with an error indicator. An input path change clears the previous source. Imported readings are not cached across widget restarts; they reload from the selected file.
 
 The two sources are displayed independently, never summed. Tray bars and tray hover text always refer to the account signed in on this computer. General notification preferences apply locally; Shared notification preferences apply to imported readings and label their popups with the other account name. Shared thresholds default to 0 and its reset alert defaults to off. Warnings are sent once per crossing, with separate persisted history for each account. Shared reset alerts require weekly quota above 0%, just like local resets. Stale or failed file reads never trigger shared alerts. Independent credit and reset-display settings affect only their respective account cards. Side by side retains both numeric columns and a divider at Mini size; headings and update status stay available on hover when they no longer fit. The shared computer defaults to teal/lilac/sand so the two accounts are easy to distinguish.
+
+**Separate windows** uses one independently movable and resizable window per account, with one shared tray icon and refresh process. Sizes, positions, and always-on-top choices are saved for each window. Closing or minimizing either window hides only that account; reopen it from the tray menu. Double-clicking the tray icon opens the local window. General size/position controls target the local window; the tray also offers Shared window size presets. Use **Exit** in the tray menu to stop both windows. Returning to a combined layout restores its previous bounds.
+
+Each Separate window uses the Single account preset dimensions below.
 
 | Preset | Single account | Side by side | Stacked | Account picker |
 | --- | --- | --- | --- | --- |

@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.0.3'
+$script:WidgetVersion = '2.1.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -455,8 +455,20 @@ $versionItem = $trayMenu.Items.Add("Codex Usage v$script:WidgetVersion")
 $versionItem.Enabled = $false
 [void]$trayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
 $trayOpenItem = $trayMenu.Items.Add('Open Codex Usage')
+# Reopen and resize the imported window independently when using Separate windows.
+$traySharedItem = [Windows.Forms.ToolStripMenuItem]::new('Open Shared computer')
+$traySharedItem.Visible = $false
+[void]$trayMenu.Items.Add($traySharedItem)
+$traySharedItem.Add_Click({ Show-SharedWidget })
+$sharedSizeMenu = [Windows.Forms.ToolStripMenuItem]::new('Shared window size')
+$sharedSizeMenu.Visible = $false
+[void]$trayMenu.Items.Add($sharedSizeMenu)
+foreach ($name in @('Mini','Small','Medium','Large / Default')) {
+    $item = $sharedSizeMenu.DropDownItems.Add($name); $item.Tag = $name
+    $item.Add_Click({ param($sender,$eventArgs) Set-SeparateWindowPreset $sender.Tag })
+}
 $trayRefreshItem = $trayMenu.Items.Add('Refresh')
-# Open the four-tab settings window from the tray.
+# Open the General and Shared settings without disabling the widget.
 $settingsItem = $trayMenu.Items.Add('Settings...')
 # Provide predictable window sizes without requiring manual dragging.
 $sizeMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Window size')
@@ -493,7 +505,13 @@ $startupItem.Add_Click({
     catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Unable to change startup setting') }
     $startupItem.Checked = Get-LaunchAtSignIn
 })
-$trayMenu.Add_Opening({ $startupItem.Checked = Get-LaunchAtSignIn })
+$trayMenu.Add_Opening({
+    $startupItem.Checked = Get-LaunchAtSignIn
+    $traySharedItem.Visible = [bool]$script:SeparateWindowsActive
+    $sharedSizeMenu.Visible = [bool]$script:SeparateWindowsActive
+    $traySharedItem.Text = 'Open ' + $script:RemoteDisplayName
+    $trayOpenItem.Text = if ($script:SeparateWindowsActive) { 'Open ' + $script:LocalDisplayName } else { 'Open Codex Usage' }
+})
 $trayExitItem = $trayMenu.Items.Add('Exit')
 $trayIcon = [System.Windows.Forms.NotifyIcon]::new()
 $trayIcon.ContextMenuStrip = $trayMenu
@@ -715,6 +733,8 @@ function Save-WidgetState {
     # Startup assigns settings before the window exists on screen; save only live bounds.
     if (-not $window.IsLoaded) { return }
     $bounds = $window.RestoreBounds
+    # Keep detached account geometry separate from the combined layout's geometry.
+    if ($script:SeparateWindowsActive) { $script:SeparateLocalBounds = @{ left=$bounds.Left;top=$bounds.Top;width=$window.Width;height=$window.Height;topmost=$window.Topmost } }
     # Use explicit current dimensions for preset changes before the next layout pass.
     @{
         left = $bounds.Left
@@ -752,6 +772,9 @@ function Save-WidgetState {
         selectedAccount = $script:SelectedAccount
         localScheme = $script:LocalScheme
         remoteScheme = $script:RemoteScheme
+        separateLocalBounds = $script:SeparateLocalBounds
+        separateRemoteBounds = $script:SeparateRemoteBounds
+        combinedWindowBounds = $script:CombinedWindowBounds
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath $script:StatePath -Encoding utf8
 }
 
@@ -1349,7 +1372,12 @@ if (Test-Path -LiteralPath $script:StatePath) {
         foreach ($key in @('writeIntervalMinutes','readIntervalMinutes')) {
             if (($state.$key -is [long] -or $state.$key -is [int]) -and $state.$key -in @(-1,0,1,5,15,30)) { Set-Variable -Scope Script -Name $key -Value ([int]$state.$key) }
         }
-        if ($state.accountLayout -in @('Side by side','Stacked','Account picker')) { $script:AccountLayout = $state.accountLayout }
+        if ($state.accountLayout -in @('Side by side','Stacked','Account picker','Separate windows')) { $script:AccountLayout = $state.accountLayout }
+        # Restore each layout's saved geometry; validation occurs before applying these bounds.
+        $script:SeparateLocalBounds = $state.separateLocalBounds
+        $script:SeparateRemoteBounds = $state.separateRemoteBounds
+        $script:CombinedWindowBounds = $state.combinedWindowBounds
+        $script:RestoredSeparateLayout = $script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Separate windows'
         if ($state.selectedAccount -in @('Local','Remote')) { $script:SelectedAccount = $state.selectedAccount }
         # Preserve palette selections saved before the Fuchsia label was shortened.
         foreach ($key in @('localScheme','remoteScheme')) {
@@ -1447,8 +1475,13 @@ $trayOpenItem.Add_Click({ Show-Widget })
 $trayRefreshItem.Add_Click({ Invoke-WidgetRefresh })
 # Apply settings through one native dialog instead of several competing menus.
 $settingsItem.Add_Click({ Show-WidgetSettings })
-$trayExitItem.Add_Click({ $window.Close() })
+$trayExitItem.Add_Click({ $script:ExitRequested = $true; $window.Close() })
 $window.Add_Closing({
+    # In Separate windows, the close button hides just the local account to the shared tray.
+    if ($script:SeparateWindowsActive -and -not $script:ExitRequested) { $_.Cancel=$true; Save-WidgetState; $window.Hide(); return }
+    $script:ExitRequested = $true
+    if ($script:SettingsForm) { $script:SettingsForm.Close() }
+    if ($script:SeparateView) { Save-SeparateWindowBounds; $script:SeparateView.Window.Close() }
     # Use the same settings writer as preset sizes and refresh interval changes.
     Save-WidgetState
     # Stop file polling before disposing the window and tray controls.
@@ -1476,10 +1509,8 @@ $window.Add_IsVisibleChanged({
     if ($window.IsVisible) {
         # Refresh countdowns immediately on restore instead of showing old text for a second.
         Update-Display
-        $clockTimer.Start()
-    } else {
-        $clockTimer.Stop()
     }
+    Update-WidgetClock
 })
 
 $script:RefreshTimer = [Windows.Threading.DispatcherTimer]::new()

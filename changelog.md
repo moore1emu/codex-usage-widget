@@ -2,6 +2,13 @@
 
 [Back to README](README.md)
 
+## 2.1.0 — October 1, 2026
+
+- Keep Settings open while interacting with either widget; preserve Apply, Save, and Cancel behavior.
+- Use account display names in both pickers and match the inline dropdown to the widget's dark theme.
+- Add Separate windows alongside existing layouts, with independent movement, resizing, saved geometry, always-on-top, hide/reopen actions, and shared-window tray size presets. Tray Exit closes both.
+- Keep compact account headings visible longer with smaller text and ellipsis; full names remain available on hover.
+
 ## 2.0.3 — October 1, 2026
 
 - Move settings explanations to hover tooltips on their related controls and labels in General and Shared, reducing visual clutter while retaining live sharing status.
