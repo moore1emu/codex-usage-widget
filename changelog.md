@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.0.1 — October 1, 2026
+
+- Add the computer name to desktop shortcuts created inside OneDrive destinations, preventing different computers from overwriting the same synced shortcut. Local destinations retain the plain Codex Usage name.
+- Detect registered OneDrive roots and custom locations, preserve unrelated shortcuts, and replace an owned generic shortcut with the new computer-specific name.
+
 ## 2.0.0 — October 1, 2026
 
 - Reorganized settings into General, Display, Sharing, and Notifications tabs with native system light/dark styling.
@@ -11,6 +16,7 @@
 - Validate shared snapshots, preserve the last good reading during missing/partial/older sync copies, and refuse to overwrite another source's JSON. Shared files contain usage data and a random source identifier, never authentication credentials.
 - Kept tray readings and notifications tied to the local account. Hide the tray credit accent when credit display is Off or the balance is zero/unavailable, and include available credits in the tray tooltip.
 - Updated documentation and screenshots. Existing window bounds, refresh and notification preferences remain; older custom colors migrate to the blue/purple/sage preset.
+
 ## 1.8.0 — October 1, 2026
 
 - Added **Reset display...** with independently saved 5-hour hours-ahead (default 25; 0 = off; maximum 168) and weekly date (default on) settings.

@@ -2,7 +2,7 @@
 
 A small Windows desktop and tray widget for Codex **5-hour and weekly usage left**, reset times, credits, and notifications. Optionally show a second computer's account through private shared JSON files.
 
-**Version 2.0.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.0.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -10,7 +10,7 @@ A small Windows desktop and tray widget for Codex **5-hour and weekly usage left
 2. Download the repository and extract it. Keep all files together.
 3. Double-click **Start-CodexUsageWidget.cmd**.
 
-Optional: run **Create-DesktopShortcut.cmd** for a desktop shortcut. Enable **Launch at Windows sign-in** from the tray menu for automatic startup.
+Optional: run **Create-DesktopShortcut.cmd** for a desktop shortcut. OneDrive destinations include the computer name to avoid shortcut conflicts between machines. Enable **Launch at Windows sign-in** from the tray menu for automatic startup.
 
 ## Widget sizes
 

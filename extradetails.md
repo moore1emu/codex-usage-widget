@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.0.0.
+This guide covers Codex Usage Widget 2.0.1.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ If this folder's widget is already running in your Windows session, a manual lau
 
 Enable **Launch at Windows sign-in** in the tray menu to start the desktop widget when you sign in. The setting uses a per-user Startup shortcut and is independent on each computer. Turn it off in the same menu to remove that shortcut. Automatic startup quietly leaves an existing instance running. Keep the widget folder in place and available locally at sign-in. Closing the Codex desktop app does not stop the widget: the widget uses its own short-lived usage-reader process and the locally installed Codex executable and saved sign-in.
 
-For a shortcut with the three-color icon, double-click **Create-DesktopShortcut.cmd** after placing the widget folder in its permanent location. It creates a local desktop shortcut using that computer's paths. Include both `Create-DesktopShortcut.cmd` and `Create-DesktopShortcut.ps1` when sharing the widget files. Each recipient runs the helper once; the generated `.lnk` is local and does not need to sync through OneDrive. Alternatively, `Start-CodexUsageWidget.cmd` already launches portably from the folder beside it. Creating a shortcut does not install PowerShell 7 or Codex, enable Windows startup, or launch the widget.
+For a shortcut with the three-color icon, double-click **Create-DesktopShortcut.cmd** after placing the widget folder in its permanent location. It creates a local desktop shortcut using that computer's paths. Include both `Create-DesktopShortcut.cmd` and `Create-DesktopShortcut.ps1` when sharing the widget files. Each recipient runs the helper once; the generated `.lnk` contains local paths. If its destination is inside a registered OneDrive folder, the helper names it **Codex Usage - COMPUTERNAME** so synced desktops do not overwrite each other's shortcuts. Elsewhere it remains **Codex Usage**. Detection uses OneDrive account registrations and environment variables, including custom sync locations. The helper removes an old generic shortcut only if it points to this exact widget folder; other computers' shortcuts are preserved. Each named shortcut works on its intended computer. Alternatively, `Start-CodexUsageWidget.cmd` already launches portably from the folder beside it. Creating a shortcut does not install PowerShell 7 or Codex, enable Windows startup, or launch the widget.
 
 Keep `Start-CodexUsageWidget.ps1` beside the CMD launcher. The launcher uses built-in Windows PowerShell to find PowerShell 7 through PATH, common installation folders, or its Microsoft Store registration, then starts the widget hidden.
 
