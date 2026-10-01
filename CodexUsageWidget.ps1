@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.1.5'
+$script:WidgetVersion = '2.1.6'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -1147,7 +1147,8 @@ function Update-Display {
     $script:CreditsVisible = $script:CreditDisplayMode -eq 'Always' -or ($script:CreditDisplayMode -eq 'Available' -and $creditsExist)
     $creditLabel = Get-CreditLabel
     # Use matching label/value columns, with a rounded whole-number credit total.
-    $creditsText.Text = $creditLabel -replace '^Credits: ', ''
+    # Keep unknown balances as a short value so their explanation cannot force compact quota rows.
+    $creditsText.Text = if ($creditLabel -match 'unavailable$') { '—' } else { $creditLabel -replace '^Credits: ', '' }
     $creditsText.ToolTip = $creditLabel
     # Use a short numeric placeholder for unknown balances in the smallest badge.
     $compactCreditsText.Text = if ($creditData.unlimited -eq $true) { '∞' } elseif ($hasBalance) { $balance.ToString('0', [Globalization.CultureInfo]::CurrentCulture) } elseif ($creditData.hasCredits -eq $false) { '0' } else { '—' }

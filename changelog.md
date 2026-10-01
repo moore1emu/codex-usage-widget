@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.1.6 — October 1, 2026
+
+- Show unknown credit balances as “—” in labeled rows, with the full explanation on hover. Long unavailable-balance messages no longer force the shared account into numbers-only mode when its quota labels fit.
+- Check side-by-side layouts with missing, unknown, and invalid shared balances alongside a known local balance.
+
 ## 2.1.5 — October 1, 2026
 
 - Defer settings status/layout updates while a dropdown is open so General and Shared lists stay open and preserve draft selections. Resume nickname, connection status and lock updates after the list closes; usage refresh continues independently.

@@ -66,7 +66,7 @@ try {
             clientInfo = @{
                 name = 'codex-usage-widget'
                 title = 'Codex Usage Widget'
-                version = '2.1.5'
+                version = '2.1.6'
             }
             capabilities = @{
                 experimentalApi = $true

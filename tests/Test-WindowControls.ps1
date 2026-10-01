@@ -18,6 +18,22 @@ try {
     $screenBottom = [Windows.SystemParameters]::VirtualScreenTop + [Windows.SystemParameters]::VirtualScreenHeight
     if ($window.Left -lt [Windows.SystemParameters]::VirtualScreenLeft -or $window.Top -lt [Windows.SystemParameters]::VirtualScreenTop -or $window.Left+$window.Width -gt $screenRight -or $window.Top+$window.Height -gt $screenBottom) { throw 'Startup left the widget outside the connected desktop.' }
     $window.Show(); $window.UpdateLayout()
+    # An unknown shared balance must not force numbers-only rows when labeled quotas still fit.
+    $script:SharedEnabled=$true; $script:ReadUsageEnabled=$true; $script:AccountLayout='Side by side'
+    $script:SharedCreditDisplayMode='Always'
+    $originalCredits=$script:RemoteUsage.credits
+    foreach ($credits in @($null,@{hasCredits=$true;balance=$null},@{hasCredits=$true;balance='invalid'})) {
+        $script:RemoteUsage.credits=$credits
+        $window.Width=400; $window.Height=270; $window.UpdateLayout(); Update-Display; $window.UpdateLayout()
+        foreach ($key in @('Local','Remote')) {
+            if ($script:AccountCards[$key].Bindings.ultraCompactPanel.Visibility -ne 'Collapsed') { throw ('Unknown credits forced a compact ' + $key + ' account.') }
+        }
+        # Preserve the explanation on hover without implying that missing credits equal zero.
+        $remote=$script:AccountCards.Remote.Bindings
+        if ($remote.creditsText.Text -ne '—' -or $remote.creditsText.ToolTip -notmatch 'unavailable') { throw 'Unknown credit display lost its placeholder or explanation.' }
+    }
+    $script:RemoteUsage.credits=$originalCredits
+    $script:SharedCreditDisplayMode='Available'
     # Check full and compact controls in every layout, including both detached account shells.
     foreach ($mode in @('Single','Account picker','Side by side','Stacked','Separate windows')) {
         $script:SharedEnabled = $mode -ne 'Single'; $script:ReadUsageEnabled=$script:SharedEnabled
