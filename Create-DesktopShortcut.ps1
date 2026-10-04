@@ -31,7 +31,7 @@ $shortcut = $null
 try {
     # Derive every application path from this file's location, never from the author's computer.
     $launcherPath = Join-Path $PSScriptRoot 'Start-AIUsageWidget.ps1'
-    $iconPath = Join-Path $PSScriptRoot 'AIUsage-Tricolor.ico'
+    $iconPath = Join-Path $PSScriptRoot 'AIUsage-App.ico'
     foreach ($requiredPath in @($launcherPath, $iconPath)) {
         if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) { throw 'Keep this helper with the widget scripts and icon, then try again.' }
     }

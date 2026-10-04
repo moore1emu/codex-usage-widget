@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.4.1.
+This guide covers AI Usage Widget 2.4.2.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
@@ -22,7 +22,7 @@ Enable **Launch at Windows sign-in** in the tray menu to start the desktop widge
 
 For a shortcut with the three-color icon, double-click **Create-DesktopShortcut.cmd** after placing the widget folder in its permanent location. It creates a local desktop shortcut using that computer's paths. Include both `Create-DesktopShortcut.cmd` and `Create-DesktopShortcut.ps1` when sharing the widget files. Each recipient runs the helper once; the generated `.lnk` contains local paths. If its destination is inside a registered OneDrive folder, the helper names it **AI Usage Widget - HOSTNAME** using the full local hostname (falling back to the Windows computer name if unavailable) so synced desktops do not overwrite each other's shortcuts. Elsewhere it remains **AI Usage Widget**. Detection uses OneDrive account registrations and environment variables, including custom sync locations. The helper removes an old generic or shortened-name shortcut only if it points to this exact widget folder; shared computers' shortcuts are preserved. Each named shortcut works on its intended computer. Alternatively, `Start-AIUsageWidget.cmd` already launches portably from the folder beside it. Creating a shortcut does not install PowerShell 7 or Codex, enable Windows startup, or launch the widget.
 
-The main files are `AIUsageWidget.ps1`, `Start-AIUsageWidget.ps1`, `Start-AIUsageWidget.cmd`, and `AIUsage-Tricolor.ico`. The old `Start-CodexUsageWidget.ps1` and `Start-CodexUsageWidget.cmd` are forwarding launchers for existing shortcuts. Run **Create-DesktopShortcut.cmd** again to create the newly named shortcut and retire an owned old shortcut. The repository URL remains unchanged.
+The main files are `AIUsageWidget.ps1`, `Start-AIUsageWidget.ps1`, `Start-AIUsageWidget.cmd`, and `AIUsage-App.ico`. The old `Start-CodexUsageWidget.ps1` and `Start-CodexUsageWidget.cmd` are forwarding launchers for existing shortcuts. Run **Create-DesktopShortcut.cmd** again to create the newly named shortcut and retire an owned old shortcut. The repository URL remains unchanged. Desktop shortcuts now use `AIUsage-App.ico`; `AIUsage-Tricolor.ico` remains as an updated compatibility copy for existing shortcuts. The artwork generator is `docs/Create-AppIcon.py` (requires Python and Pillow).
 
 Saved settings and the Claude browser profile remain under the legacy `%LOCALAPPDATA%\CodexUsageWidget` folder so the rename does not discard preferences or sign-in. The sign-in shortcut retains its legacy filename and is updated to the new launcher and icon automatically.
 

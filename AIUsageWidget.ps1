@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.4.1'
+$script:WidgetVersion = '2.4.2'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -466,7 +466,7 @@ function Set-LaunchAtSignIn {
         $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
         $shortcut.Arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -IfNotRunning' -f $launcher
         $shortcut.WorkingDirectory = $script:WidgetDirectory
-        $shortcut.IconLocation = (Join-Path $script:WidgetDirectory 'AIUsage-Tricolor.ico') + ',0'
+        $shortcut.IconLocation = (Join-Path $script:WidgetDirectory 'AIUsage-App.ico') + ',0'
         $shortcut.Description = 'Start AI Usage Widget at sign-in without duplicating an existing widget.'
         $shortcut.Save()
     } finally {

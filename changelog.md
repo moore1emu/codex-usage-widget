@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.4.2 — October 4, 2026
+
+- Refresh the desktop shortcut icon with a dark dashboard tile and blue, purple and sage bars, including seven native Windows icon sizes. Add the artwork generator for future updates.
+- Refresh README screenshots with current connected accounts, the stationary usage bar, single-account sizes and all five settings tabs. Use genuine usage readings with neutral account names and private paths replaced by placeholders.
+
 ## 2.4.1 — October 4, 2026
 
 - Suppress five-hour countdowns and projected reset times while 100% remains; show “Reset starts after usage” (compact: “Not started”) until actual usage begins. Weekly resets remain independent.
