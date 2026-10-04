@@ -5,13 +5,15 @@ $script:AccountLayout='Account picker'
 $settings=[IO.File]::ReadAllText((Join-Path $script:TestProject 'WidgetSettings.ps1'))
 # Keep the real status timer and message loop; add only a bounded interaction driver.
 $settings=$settings.Replace('[Windows.Threading.Dispatcher]::PushFrame($settingsFrame)',@'
+# Validate visible tab names separately from the preserved internal settings keys.
+if (($tabs.TabPages.Text -join ',') -ne 'General,Codex,Shared Codex,Claude,Shared Claude') { throw 'Provider tabs were not labeled consistently.' }
 $dropdownTimer=[Windows.Forms.Timer]::new()
 $dropdownTimer.Interval=1400
 # Unlock draft-only Claude choices without enabling a live connection or applying settings.
 $controls.ClaudeEnabled.Checked=$true;$controls.ClaudePlacement.SelectedItem='Separate window'
 $controls.SharedClaudeEnabled.Checked=$true;$controls.SharedClaudeReadEnabled.Checked=$true;$controls.SharedClaudeWriteEnabled.Checked=$true
 $controls.SharedClaudePlacement.SelectedItem='Separate window'
-$script:DropdownChoices=@('Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval')
+$script:DropdownChoices=@('DefaultRefresh','DefaultCredits','Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval')
 $script:DropdownIndex=0
 $script:OpenDropdownKey=$null
 $dropdownTimer.Add_Tick({
@@ -19,7 +21,7 @@ $dropdownTimer.Add_Tick({
         if ($script:OpenDropdownKey) {
             # The actual one-second callback must preserve both the open list and the draft value.
             $choice=$controls[$script:OpenDropdownKey]
-            if (-not $choice.DroppedDown -or $choice.SelectedIndex -ne $script:DropdownSelection) { throw ('Status tick interrupted ' + $script:OpenDropdownKey) }
+            if (-not $choice.DroppedDown -or $choice.SelectedIndex -ne $script:DropdownSelection) { throw ('Status tick interrupted ' + $script:OpenDropdownKey + '; open=' + $choice.DroppedDown + '; enabled=' + $choice.Enabled + '; selected=' + $choice.SelectedIndex + '; expected=' + $script:DropdownSelection + '; active=' + [object]::ReferenceEquals([Windows.Forms.Form]::ActiveForm,$dialog) + '; read=' + $controls.ReadEnabled.Checked) }
             $choice.DroppedDown=$false
         }
         if ($script:DropdownIndex -ge $script:DropdownChoices.Count) {

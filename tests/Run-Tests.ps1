@@ -10,7 +10,7 @@ foreach ($file in @(Get-ChildItem -LiteralPath $project -Filter '*.ps1') + @(Get
     if ($parseErrors.Count) { throw ($file.Name + ': ' + ($parseErrors.Message -join '; ')) }
 }
 # Use PowerShell 7 for sharing and actual WPF interaction checks.
-foreach ($name in @('Test-Sharing.ps1','Test-ClaudeSharing.ps1','Test-WindowControls.ps1','Test-Claude.ps1','Test-SettingsDropdowns.ps1')) {
+foreach ($name in @('Test-Sharing.ps1','Test-ClaudeSharing.ps1','Test-WindowControls.ps1','Test-Claude.ps1','Test-Defaults.ps1','Test-SettingsDropdowns.ps1')) {
     & $pwshPath -NoProfile -STA -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $name)
     if ($LASTEXITCODE -ne 0) { throw ($name + ' failed.') }
 }

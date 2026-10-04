@@ -9,7 +9,7 @@ if (-not $script:TestState) {
 if (-not $InitialTestState) { $InitialTestState = @{ refreshIntervalMinutes=0;sharedEnabled=$false;readUsageEnabled=$false;topmost=$false } }
 $InitialTestState | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $script:TestState 'widget-state.json') -Encoding utf8
 # Parse production source so only the popup trap and real startup integration are replaced.
-$source = [IO.File]::ReadAllText((Join-Path $script:TestProject 'CodexUsageWidget.ps1'))
+$source = [IO.File]::ReadAllText((Join-Path $script:TestProject 'AIUsageWidget.ps1'))
 $ast = [Management.Automation.Language.Parser]::ParseInput($source,[ref]$null,[ref]$null)
 $trap = $ast.Find({param($node) $node -is [Management.Automation.Language.TrapStatementAst]},$true)
 $source = $source.Replace($trap.Extent.Text,'')

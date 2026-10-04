@@ -10,6 +10,8 @@ if ($Scenario -eq 'FourAccounts') {
     $script:SharedClaudeOptions.Enabled=$true;$script:SharedClaudeOptions.ReadEnabled=$true
     $script:ClaudeUsage=$script:Usage;$script:SharedClaudeUsage=$script:RemoteUsage
 }
+# Simulate the old title so the renamed launcher must support upgrading a running widget.
+if ($Scenario -eq 'LegacyTitle') { $window.Title = 'Codex Usage v2.2.2' }
 $window.Show(); $window.UpdateLayout(); Update-Display
 # Use deterministic dimensions so the parent can verify final state persistence after exit.
 $window.Left=100; $window.Top=100; $window.Width=190; $window.Height=210

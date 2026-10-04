@@ -12,11 +12,11 @@ trap {
     } catch { }
     # Use the built-in popup even when WPF initialization itself failed.
     $errorShell = New-Object -ComObject WScript.Shell
-    [void]$errorShell.Popup($startupMessage, 0, 'Codex Usage Widget - Error', 16)
+    [void]$errorShell.Popup($startupMessage, 0, 'AI Usage Widget - Error', 16)
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.2.2'
+$script:WidgetVersion = '2.3.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -130,14 +130,14 @@ foreach ($key in @($script:AlertStates.Keys)) {
 # Show positive or unlimited credits by default, regardless of subscription usage.
 $script:CreditDisplayMode = 'Available'
 # Load the v2 sharing, account rendering, and unified native settings helpers.
-foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1')) {
+foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1','WidgetDefaults.ps1')) {
     . (Join-Path $script:WidgetDirectory $helper)
 }
 
 [xml] $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Codex Usage" Width="280" Height="290" WindowStyle="None"
+        Title="AI Usage Widget" Width="280" Height="290" WindowStyle="None"
         MinWidth="72" MinHeight="58" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False">
   <Border x:Name="OuterBorder" CornerRadius="18" Background="#F2161A23" BorderBrush="#413D4658" BorderThickness="1" Padding="18">
@@ -166,7 +166,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <Ellipse x:Name="StatusDot" Width="9" Height="9" Fill="#4FD1A5" Margin="0,0,9,0" VerticalAlignment="Center"/>
           <StackPanel>
-            <TextBlock x:Name="TitleText" Text="CODEX USAGE" Foreground="#F5F7FB" FontSize="13" FontWeight="SemiBold"/>
+            <TextBlock x:Name="TitleText" Text="AI USAGE" Foreground="#F5F7FB" FontSize="13" FontWeight="SemiBold"/>
           </StackPanel>
         </StackPanel>
         <TextBlock x:Name="PlanText" Grid.Row="1" Grid.ColumnSpan="5" Text="Connecting…" Foreground="#8992A8" FontSize="10"/>
@@ -222,12 +222,15 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
           </Grid.RowDefinitions>
           <!-- Keep each reset countdown directly below its corresponding percentage. -->
           <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <!-- Identify each stationary horizontal metric without changing vertical mini labels. -->
+            <TextBlock x:Name="CompactPrimaryCaption" Text="5-hour" Foreground="#DDE3EF" FontSize="10" HorizontalAlignment="Center" Visibility="Collapsed"/>
             <TextBlock x:Name="CompactPrimaryPercent" Text="—" Foreground="#78A7FF" FontSize="20"
                        FontWeight="SemiBold" HorizontalAlignment="Center"/>
             <TextBlock x:Name="CompactPrimaryReset" Text="—" Foreground="#8992A8" FontSize="10"
                        HorizontalAlignment="Center"/>
           </StackPanel>
           <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock x:Name="CompactSecondaryCaption" Text="Weekly" Foreground="#DDE3EF" FontSize="10" HorizontalAlignment="Center" Visibility="Collapsed"/>
             <TextBlock x:Name="CompactSecondaryPercent" Text="—" Foreground="#B893FF" FontSize="20"
                        FontWeight="SemiBold" HorizontalAlignment="Center"/>
             <TextBlock x:Name="CompactSecondaryReset" Text="—" Foreground="#8992A8" FontSize="10"
@@ -255,7 +258,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
       <Button x:Name="HoverRefreshButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="↻" ToolTip="Refresh now"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Margin="0,0,24,0" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#AAB2C5" BorderThickness="0" FontSize="16" Cursor="Hand"/>
-      <Button x:Name="HoverCloseButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="×" ToolTip="Close Codex Usage"
+      <Button x:Name="HoverCloseButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="×" ToolTip="Close AI Usage Widget"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
               Background="#F2161A23" Foreground="#F06A7A" BorderThickness="0" FontSize="18" Cursor="Hand"/>
 
@@ -281,6 +284,8 @@ $ultraCompactPanel = $window.FindName('UltraCompactPanel')
 $compactPrimaryPercent = $window.FindName('CompactPrimaryPercent')
 $compactSecondaryPercent = $window.FindName('CompactSecondaryPercent')
 # Bind the reset labels used after the header and progress bars disappear.
+$compactPrimaryCaption = $window.FindName('CompactPrimaryCaption')
+$compactSecondaryCaption = $window.FindName('CompactSecondaryCaption')
 $compactPrimaryReset = $window.FindName('CompactPrimaryReset')
 $compactSecondaryReset = $window.FindName('CompactSecondaryReset')
 # Bind full-size and compact credit labels to the same account snapshot.
@@ -318,7 +323,7 @@ $closeButton = $window.FindName('CloseButton')
 $leftResizeGrip = $window.FindName('LeftResizeGrip')
 $rightResizeGrip = $window.FindName('RightResizeGrip')
 # Expose the installed version without adding width to the responsive header.
-$window.Title = "Codex Usage v$script:WidgetVersion"
+$window.Title = "AI Usage Widget v$script:WidgetVersion"
 $titleText.ToolTip = $window.Title
 $ultraCompactPanel.ToolTip = "$($window.Title) · Usage left · Top: 5-hour · Next: weekly · Double-click to expand"
 
@@ -425,9 +430,12 @@ function Get-LaunchAtSignIn {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($script:StartupShortcutPath)
     try {
-        $launcher = Join-Path $script:WidgetDirectory 'Start-CodexUsageWidget.ps1'
+        $launcher = Join-Path $script:WidgetDirectory 'Start-AIUsageWidget.ps1'
         return $shortcut.TargetPath -eq "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -and
-            $shortcut.Arguments -eq ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -IfNotRunning' -f $launcher)
+            $shortcut.Arguments -in @(
+                ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -IfNotRunning' -f $launcher)
+                ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -IfNotRunning' -f (Join-Path $script:WidgetDirectory 'Start-CodexUsageWidget.ps1'))
+            )
     } finally {
         # Release temporary COM references instead of retaining one for every tray-menu opening.
         [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut)
@@ -439,7 +447,7 @@ function Set-LaunchAtSignIn {
     param([bool] $Enabled)
     # Do not overwrite or remove a different shortcut that happens to use our chosen filename.
     if ((Test-Path -LiteralPath $script:StartupShortcutPath) -and -not (Get-LaunchAtSignIn)) {
-        throw 'A different Codex Usage Widget startup shortcut already exists. Remove or rename that entry before changing this setting.'
+        throw 'A different AI Usage Widget startup shortcut already exists. Remove or rename that entry before changing this setting.'
     }
     if (-not $Enabled) {
         if (Test-Path -LiteralPath $script:StartupShortcutPath -PathType Leaf) { Remove-Item -LiteralPath $script:StartupShortcutPath }
@@ -449,12 +457,12 @@ function Set-LaunchAtSignIn {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($script:StartupShortcutPath)
     try {
-        $launcher = Join-Path $script:WidgetDirectory 'Start-CodexUsageWidget.ps1'
+        $launcher = Join-Path $script:WidgetDirectory 'Start-AIUsageWidget.ps1'
         $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
         $shortcut.Arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -IfNotRunning' -f $launcher
         $shortcut.WorkingDirectory = $script:WidgetDirectory
-        $shortcut.IconLocation = (Join-Path $script:WidgetDirectory 'CodexUsage-Tricolor.ico') + ',0'
-        $shortcut.Description = 'Start Codex Usage at sign-in without duplicating an existing widget.'
+        $shortcut.IconLocation = (Join-Path $script:WidgetDirectory 'AIUsage-Tricolor.ico') + ',0'
+        $shortcut.Description = 'Start AI Usage Widget at sign-in without duplicating an existing widget.'
         $shortcut.Save()
     } finally {
         [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut)
@@ -462,14 +470,17 @@ function Set-LaunchAtSignIn {
     }
 }
 
+# Refresh an owned sign-in shortcut's title, icon and target after the application rename.
+if (Get-LaunchAtSignIn) { Set-LaunchAtSignIn -Enabled $true }
+
 $trayMenu = [System.Windows.Forms.ContextMenuStrip]::new()
 # Keep version information accessible even when the widget is minimized or tiny.
-$versionItem = $trayMenu.Items.Add("Codex Usage v$script:WidgetVersion")
+$versionItem = $trayMenu.Items.Add("AI Usage Widget v$script:WidgetVersion")
 $versionItem.Enabled = $false
 [void]$trayMenu.Items.Add([System.Windows.Forms.ToolStripSeparator]::new())
-$trayOpenItem = $trayMenu.Items.Add('Open Codex Usage')
+$trayOpenItem = $trayMenu.Items.Add('Open Codex')
 # Reopen and resize the imported window independently when using Separate windows.
-$traySharedItem = [Windows.Forms.ToolStripMenuItem]::new('Open Shared computer')
+$traySharedItem = [Windows.Forms.ToolStripMenuItem]::new('Open Shared Codex')
 $traySharedItem.Visible = $false
 [void]$trayMenu.Items.Add($traySharedItem)
 $traySharedItem.Add_Click({ Show-SharedWidget })
@@ -478,7 +489,7 @@ $claudeOpenItem=$trayMenu.Items.Add('Open Claude')
 $claudeOpenItem.Add_Click({Show-ClaudeWidget})
 $sharedClaudeOpenItem=$trayMenu.Items.Add('Open Shared Claude')
 $sharedClaudeOpenItem.Add_Click({Show-SharedClaudeWidget})
-$sharedSizeMenu = [Windows.Forms.ToolStripMenuItem]::new('Shared window size')
+$sharedSizeMenu = [Windows.Forms.ToolStripMenuItem]::new('Shared Codex window size')
 $sharedSizeMenu.Visible = $false
 [void]$trayMenu.Items.Add($sharedSizeMenu)
 foreach ($name in @('Mini','Small','Medium','Large / Default')) {
@@ -527,17 +538,17 @@ $trayMenu.Add_Opening({
     $startupItem.Checked = Get-LaunchAtSignIn
     $traySharedItem.Visible = [bool]$script:SeparateWindowsActive
     $sharedSizeMenu.Visible = [bool]$script:SeparateWindowsActive
-    $traySharedItem.Text = 'Open ' + $script:RemoteDisplayName
+    $traySharedItem.Text = 'Open Shared Codex · ' + $script:RemoteDisplayName
     $claudeOpenItem.Visible=[bool]$script:ClaudeOptions.Enabled
-    $claudeOpenItem.Text='Open '+$script:ClaudeOptions.Name
+    $claudeOpenItem.Text='Open Claude · '+$script:ClaudeOptions.Name
     $sharedClaudeOpenItem.Visible=$script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled
-    $sharedClaudeOpenItem.Text='Open '+$script:SharedClaudeOptions.Name
-    $trayOpenItem.Text = if ($script:SeparateWindowsActive) { 'Open ' + $script:LocalDisplayName } else { 'Open Codex Usage' }
+    $sharedClaudeOpenItem.Text='Open Shared Claude · '+$script:SharedClaudeOptions.Name
+    $trayOpenItem.Text = 'Open Codex · ' + $script:LocalDisplayName
 })
 $trayExitItem = $trayMenu.Items.Add('Exit')
 $trayIcon = [System.Windows.Forms.NotifyIcon]::new()
 $trayIcon.ContextMenuStrip = $trayMenu
-$trayIcon.Text = 'Codex usage · connecting'
+$trayIcon.Text = 'AI usage · connecting'
 $script:TrayIconImage = New-TrayUsageIcon
 $trayIcon.Icon = $script:TrayIconImage
 $trayIcon.Visible = $true
@@ -744,8 +755,13 @@ function Save-WarningState {
 
 
 function Set-RefreshInterval {
-    param([int] $Minutes)
+    param([int] $Minutes, [switch] $FromDefaults)
     if ($Minutes -notin @(0, 1, 5, 15, 30)) { return }
+    # A direct tray choice becomes a local override; startup and Apply preserve inheritance.
+    if (-not $FromDefaults -and $script:AccountCustomSettings.Local) {
+        $script:AccountUseDefaults.Local.Refresh=$false
+        $script:AccountCustomSettings.Local.Refresh=$Minutes
+    }
     $script:RefreshIntervalMinutes = $Minutes
 
 
@@ -773,6 +789,9 @@ function Save-WidgetState {
         width = $window.Width
         height = $window.Height
         topmost = $window.Topmost
+        # Persist inheritance and custom values independently from resolved account preferences.
+        generalDefaults = $script:GeneralDefaults
+        accountDefaultPreferences = Get-AccountDefaultState
         refreshIntervalMinutes = $script:RefreshIntervalMinutes
         # Store account enable switches and Claude options locally, never in shared usage JSON.
         localEnabled = $script:LocalEnabled
@@ -810,7 +829,7 @@ function Save-WidgetState {
         separateLocalBounds = $script:SeparateLocalBounds
         separateRemoteBounds = $script:SeparateRemoteBounds
         combinedWindowBounds = $script:CombinedWindowBounds
-    } | ConvertTo-Json -Compress | Set-Content -LiteralPath $script:StatePath -Encoding utf8
+    } | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $script:StatePath -Encoding utf8
 }
 
 function Update-PinDisplay {
@@ -860,6 +879,28 @@ function Update-HoverControls {
 function Update-ResponsiveLayout {
     # Measure labeled rows before choosing a layout, rather than guessing a cutoff.
     $measureSize = [System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity)
+    # Restore the normal numeric grid before measuring a new shape; horizontal mode is reversible.
+    $metricGrid = $ultraCompactPanel.Child
+    if ($metricGrid.ColumnDefinitions.Count) {
+        $metricGrid.ColumnDefinitions.Clear()
+        $metricGrid.RowDefinitions.Clear()
+        foreach ($size in @('*','*','Auto')) {
+            $row = [Windows.Controls.RowDefinition]::new()
+            $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($size)
+            $metricGrid.RowDefinitions.Add($row)
+        }
+        $metricPanels = @($compactPrimaryPercent.Parent,$compactSecondaryPercent.Parent,$compactCreditsPanel)
+        for ($index=0;$index -lt $metricPanels.Count;$index++) {
+            [Windows.Controls.Grid]::SetRow($metricPanels[$index],$index)
+            [Windows.Controls.Grid]::SetColumn($metricPanels[$index],0)
+            $metricPanels[$index].VerticalAlignment = 'Center'
+        }
+        # Return Credits below the balance in vertical mini mode.
+        $compactCreditsPanel.Children.Remove($compactCreditsCaption)
+        [void]$compactCreditsPanel.Children.Add($compactCreditsCaption)
+    }
+    $compactPrimaryCaption.Visibility='Collapsed'
+    $compactSecondaryCaption.Visibility='Collapsed'
     # Restore visibility before measurement so resizing upward is deterministic.
     foreach ($control in @($primaryArea, $secondaryArea, $creditsArea, $primaryReset, $secondaryReset)) { $control.Visibility = 'Visible' }
     # Consume the center gap before shortening labels or reducing numeric type size.
@@ -879,15 +920,31 @@ function Update-ResponsiveLayout {
         $valueWidth = [Math]::Max($primaryPercent.DesiredSize.Width, $secondaryPercent.DesiredSize.Width)
         if ($script:CreditsVisible) { $labelWidth = [Math]::Max($labelWidth, $creditsLabel.DesiredSize.Width); $valueWidth = [Math]::Max($valueWidth, $creditsText.DesiredSize.Width) }
         $requiredWidth = $labelWidth + $valueWidth + 8
-        if ($requiredWidth + 14 -le $window.ActualWidth) { break }
+        # Use the widest account's label/value pair so all connected cards shorten together.
+        if ($script:SharedAccountLayout) {
+            if ($script:ProbingAccountLayout) {
+                $script:SharedAccountLayout.Widths[$density] = [Math]::Max($script:SharedAccountLayout.Widths[$density],$requiredWidth)
+                $script:SharedAccountLayout.Values[$density] = [Math]::Max($script:SharedAccountLayout.Values[$density],$valueWidth)
+            } else {
+                $requiredWidth = $script:SharedAccountLayout.Widths[$density]
+                $valueWidth = $script:SharedAccountLayout.Values[$density]
+            }
+        }
+        foreach ($area in @($primaryArea,$secondaryArea,$creditsArea)) { $area.ColumnDefinitions[1].MinWidth = if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $valueWidth } else { 0 } }
+        if (-not $script:ProbingAccountLayout -and $requiredWidth + 14 -le $window.ActualWidth) { break }
     }
     # Wrap reset details at the current width and retain them before considering bars.
     Update-ResetLabels
     # Reserve the actual reset text height, the existing 27px value row, and 5px row margins.
     $resetHeight = [Math]::Ceiling([Math]::Max($primaryReset.DesiredSize.Height, $secondaryReset.DesiredSize.Height))
+    if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $resetHeight = $script:SharedAccountLayout.ResetHeight }
     $creditHeight = if ($script:CreditsVisible -or $script:ReserveCreditRow) { 32 } else { 0 }
     $labeledHeight = 2 * (27 + 5 + $resetHeight) + $creditHeight
-    $ultraCompact = $window.ActualWidth -lt ($requiredWidth + 14) -or $window.ActualHeight -lt ($labeledHeight + 14)
+    # Wide, short cards can show stationary metrics across one row instead of stacking them.
+    $metricCount = if ($script:CreditsVisible -or $script:ReserveCreditRow) { 3 } else { 2 }
+    $horizontalMetrics = $window.ActualHeight -le 120 -and $window.ActualWidth -ge (70 * $metricCount + 14)
+    if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout -and -not $script:SharedAccountLayout.TickerPossible) { $horizontalMetrics=$false }
+    $ultraCompact = $horizontalMetrics -or $script:ProbingAccountLayout -or $window.ActualWidth -lt ($requiredWidth + 14) -or $window.ActualHeight -lt ($labeledHeight + 14)
     # Hide bars only after the essential labeled rows consume the available height.
     $showBars = $window.ActualHeight -ge ($labeledHeight + 24 + 20 + 14)
     $coreHeight = $labeledHeight + $(if ($showBars) { 24 } else { 0 })
@@ -911,14 +968,63 @@ function Update-ResponsiveLayout {
         $dragArea.Visibility = 'Collapsed'
         $footerArea.Visibility = 'Collapsed'
         $outerBorder.Padding = [System.Windows.Thickness]::new(6)
+        # Keep the wide horizontal view static, with identical metric tracks across connected accounts.
+        if ($horizontalMetrics) {
+            if ($script:ReserveCreditRow -and -not $script:CreditsVisible) { $compactCreditsText.Text='—' }
+            $labels=@($compactPrimaryPercent,$compactSecondaryPercent)
+            if ($metricCount -eq 3) { $labels += $compactCreditsText }
+            $numberSize=if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $script:SharedAccountLayout.TickerFontSize } else { 20 }
+            $trackWidth=($window.ActualWidth-14)/$metricCount
+            while ($numberSize -ge 10) {
+                $numberWidth=0;$numberHeight=0
+                foreach ($label in $labels) {
+                    $label.FontSize=$numberSize;$label.Measure($measureSize)
+                    $numberWidth=[Math]::Max($numberWidth,$label.DesiredSize.Width)
+                    $numberHeight=[Math]::Max($numberHeight,$label.DesiredSize.Height)
+                }
+                if ($numberWidth+8 -le $trackWidth -and $numberHeight+14 -le $window.ActualHeight) { break }
+                $numberSize--
+            }
+            # Fall back together if any connected account's values cannot fit readable horizontal tracks.
+            if ($numberSize -lt 10) {
+                $horizontalMetrics=$false
+                if ($script:SharedAccountLayout -and $script:ProbingAccountLayout) { $script:SharedAccountLayout.TickerPossible=$false }
+            } else {
+                if ($script:SharedAccountLayout -and $script:ProbingAccountLayout) { $script:SharedAccountLayout.TickerFontSize=[Math]::Min($script:SharedAccountLayout.TickerFontSize,$numberSize) }
+                $metricGrid.RowDefinitions.Clear()
+                $row=[Windows.Controls.RowDefinition]::new();$row.Height=[Windows.GridLength]::Auto;$metricGrid.RowDefinitions.Add($row)
+                for ($index=0;$index -lt $metricCount;$index++) { $metricGrid.ColumnDefinitions.Add([Windows.Controls.ColumnDefinition]::new()) }
+                $metricPanels=@($compactPrimaryPercent.Parent,$compactSecondaryPercent.Parent,$compactCreditsPanel)
+                for ($index=0;$index -lt $metricPanels.Count;$index++) {
+                    [Windows.Controls.Grid]::SetRow($metricPanels[$index],0)
+                    [Windows.Controls.Grid]::SetColumn($metricPanels[$index],$index)
+                    $metricPanels[$index].VerticalAlignment='Top'
+                }
+                # Align Credits with the quota captions and leave absent balances genuinely invisible.
+                $compactCreditsPanel.Children.Remove($compactCreditsCaption)
+                $compactCreditsPanel.Children.Insert(0,$compactCreditsCaption)
+                $compactCreditsPanel.Visibility=if ($script:CreditsVisible) {'Visible'} elseif ($script:ReserveCreditRow) {'Hidden'} else {'Collapsed'}
+                $showResets=$window.ActualHeight -ge ($numberHeight+12+14)
+                $showCaptions=$window.ActualHeight -ge ($numberHeight+12+14+$(if ($showResets) {12} else {0}))
+                foreach ($caption in @($compactPrimaryCaption,$compactSecondaryCaption,$compactCreditsCaption)) { $caption.Visibility=if ($showCaptions) {'Visible'} else {'Collapsed'} }
+                foreach ($reset in @($compactPrimaryReset,$compactSecondaryReset)) { $reset.Visibility=if ($showResets) {'Visible'} else {'Collapsed'} }
+                $ultraCompactPanel.Margin=[Windows.Thickness]::new(0)
+                Update-HoverControls
+                if (-not $script:RenderingAccountCard) { Update-AccountViews }
+                return
+            }
+        }
         # Fit three numeric rows at minimum size when credits are enabled.
-        $numberSize = if ($script:CreditsVisible -and $window.ActualHeight -lt 75) { 12 } elseif ($window.ActualWidth -lt 105 -or $window.ActualHeight -lt 75) { 15 } else { 20 }
+        $numberSize = if (($script:CreditsVisible -or $script:ReserveCreditRow) -and $window.ActualHeight -lt 75) { 12 } elseif ($window.ActualWidth -lt 105 -or $window.ActualHeight -lt 75) { 15 } else { 20 }
+        # Empty credit slots still occupy a row, keeping Claude percentages level with Codex.
+        if ($script:ReserveCreditRow -and -not $script:CreditsVisible) { $compactCreditsText.Text = '—' }
+        if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $numberSize = $script:SharedAccountLayout.NumberSize }
         $compactPrimaryPercent.FontSize = $numberSize
         $compactSecondaryPercent.FontSize = $numberSize
         $compactCreditsText.FontSize = $numberSize
         # Fit the numeric rows themselves using measured font heights, including 72x58.
         $numericLabels = @($compactPrimaryPercent, $compactSecondaryPercent)
-        if ($script:CreditsVisible) { $numericLabels += $compactCreditsText }
+        if ($script:CreditsVisible -or $script:ReserveCreditRow) { $numericLabels += $compactCreditsText }
         while ($numberSize -ge 10) {
             $numericHeight = 0
             $numericWidth = 0
@@ -931,6 +1037,8 @@ function Update-ResponsiveLayout {
             if (($numericHeight -le ($window.ActualHeight - 14) -and $numericWidth -le ($window.ActualWidth - 14)) -or $numberSize -eq 10) { break }
             $numberSize--
         }
+        # Share the smallest fitting numeric font across connected columns.
+        if ($script:SharedAccountLayout -and $script:ProbingAccountLayout) { $script:SharedAccountLayout.NumberSize = [Math]::Min($script:SharedAccountLayout.NumberSize,$numberSize) }
         # Reserve the reset countdowns before deciding whether refresh has spare space.
         $refreshHeight = 0
         # Measure actual text so countdowns remain visible for as long as they fit.
@@ -944,16 +1052,21 @@ function Update-ResponsiveLayout {
         $rowHeight = [Math]::Max($compactPrimaryPercent.DesiredSize.Height + $compactPrimaryReset.DesiredSize.Height,
                                $compactSecondaryPercent.DesiredSize.Height + $compactSecondaryReset.DesiredSize.Height)
         $resetWidth = [Math]::Max($compactPrimaryReset.DesiredSize.Width, $compactSecondaryReset.DesiredSize.Width)
+        # Require the widest countdown to fit so every connected column keeps or hides it together.
+        if ($script:SharedAccountLayout) {
+            if ($script:ProbingAccountLayout) { $script:SharedAccountLayout.ResetWidth = [Math]::Max($script:SharedAccountLayout.ResetWidth,$resetWidth) }
+            else { $resetWidth = $script:SharedAccountLayout.ResetWidth }
+        }
         # Reserve space for visible credits rather than silently dropping the balance.
-        $compactCreditsPanel.Visibility = if ($script:CreditsVisible) { 'Visible' } else { 'Collapsed' }
+        $compactCreditsPanel.Visibility = if ($script:CreditsVisible) { 'Visible' } elseif ($script:ReserveCreditRow) { 'Hidden' } else { 'Collapsed' }
         $compactCreditsCaption.Visibility = 'Visible'
         $compactCreditsPanel.Measure($measureSize)
-        $creditHeight = if ($script:CreditsVisible) { $compactCreditsPanel.DesiredSize.Height } else { 0 }
+        $creditHeight = if ($script:CreditsVisible -or $script:ReserveCreditRow) { $compactCreditsPanel.DesiredSize.Height } else { 0 }
         # Remove the credit caption before hiding reset countdowns at tight sizes.
         if ($window.ActualHeight -lt (2 * $rowHeight + $creditHeight + 14 + $refreshHeight)) {
             $compactCreditsCaption.Visibility = 'Collapsed'
             $compactCreditsPanel.Measure($measureSize)
-            $creditHeight = if ($script:CreditsVisible) { $compactCreditsPanel.DesiredSize.Height } else { 0 }
+            $creditHeight = if ($script:CreditsVisible -or $script:ReserveCreditRow) { $compactCreditsPanel.DesiredSize.Height } else { 0 }
         }
         $showResets = ($window.ActualHeight -ge (2 * $rowHeight + $creditHeight + 14 + $refreshHeight)) -and ($window.ActualWidth -ge ($resetWidth + 14))
         $compactPrimaryReset.Visibility = if ($showResets) { 'Visible' } else { 'Collapsed' }
@@ -980,13 +1093,13 @@ function Update-ResponsiveLayout {
     # Measure header controls separately, adding them only after the data rows fit.
     # Fit the full title before abbreviating it; the plan line has its own fit check.
     $planText.Visibility = 'Collapsed'
-    $titleText.Text = 'CODEX USAGE'
+    $titleText.Text = 'AI USAGE'
     $dragArea.Visibility = 'Visible'
     # Measure the title and fixed controls directly; a star column can retain old layout width.
     $titleText.Measure($measureSize)
     $headerWidth = $titleText.DesiredSize.Width + 18 + 96
     if ($headerWidth + 14 -gt $window.ActualWidth) {
-        $titleText.Text = 'CODEX'
+        $titleText.Text = 'AI'
         $titleText.Measure($measureSize)
         $headerWidth = $titleText.DesiredSize.Width + 18 + 96
     }
@@ -1178,7 +1291,16 @@ function Update-ResetLabels {
         # Equal star rows must both fit the taller reset block before adding bars or header controls.
         $resetHeight = [Math]::Ceiling([Math]::Max($primaryReset.DesiredSize.Height, $secondaryReset.DesiredSize.Height))
         $creditHeight = if ($script:CreditsVisible -or $script:ReserveCreditRow) { 32 } else { 0 }
-        if (2 * (27 + 5 + $resetHeight) + $creditHeight + 14 -le $window.ActualHeight) { break }
+        # Keep the tallest schedule/date for each detail level across connected accounts.
+        if ($script:SharedAccountLayout) {
+            if ($script:ProbingAccountLayout) {
+                $script:SharedAccountLayout.ResetHeights[$detailLevel] = [Math]::Max($script:SharedAccountLayout.ResetHeights[$detailLevel],$resetHeight)
+            } else {
+                $resetHeight = $script:SharedAccountLayout.ResetHeights[$detailLevel]
+                $script:SharedAccountLayout.ResetHeight = $resetHeight
+            }
+        }
+        if (-not $script:ProbingAccountLayout -and 2 * (27 + 5 + $resetHeight) + $creditHeight + 14 -le $window.ActualHeight) { break }
     }
 }
 
@@ -1483,6 +1605,8 @@ if (Test-Path -LiteralPath $script:StatePath) {
 else {
     $window.WindowStartupLocation = 'CenterScreen'
 }
+# Resolve General defaults after all legacy provider preferences have been restored.
+Initialize-AccountDefaults $state
 # Recover saved positions beyond the connected desktop before showing the main window.
 if ($window.WindowStartupLocation -eq 'Manual') {
     Restore-AccountWindowBounds $window @{ left=$window.Left;top=$window.Top;width=$window.Width;height=$window.Height;topmost=$window.Topmost }
@@ -1631,7 +1755,7 @@ $window.Add_IsVisibleChanged({
 
 $script:RefreshTimer = [Windows.Threading.DispatcherTimer]::new()
 $script:RefreshTimer.Add_Tick({ Start-UsageRefresh })
-Set-RefreshInterval -Minutes $script:RefreshIntervalMinutes
+Set-RefreshInterval -Minutes $script:RefreshIntervalMinutes -FromDefaults
 # Independent file timers remain active in the tray but do no work when sharing is disabled.
 $script:SharingTimer = [Windows.Threading.DispatcherTimer]::new()
 $script:SharingTimer.Interval = [TimeSpan]::FromSeconds(5)

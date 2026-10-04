@@ -2,6 +2,17 @@
 
 [Back to README](README.md)
 
+## 2.3.0 — October 4, 2026
+
+- Rename the app to AI Usage Widget, including the main script, launchers, icon, window titles, new desktop shortcuts and documentation. Keep the GitHub repository name unchanged.
+- Add a General tab for shared window/startup controls and default refresh, reset-display, notification and Codex credit settings.
+- Add separate inheritance switches by account and settings group. Preserve custom overrides while inheriting, restore them on uncheck, keep colors independent, and preserve existing choices during migration.
+- Label account tabs Codex, Shared Codex, Claude and Shared Claude; retain provider names alongside account nicknames in the tray and card status.
+- Keep forwarding launchers for existing shortcuts, preserve saved settings and Claude sign-in, and support graceful restart of widgets using the old script name.
+- Refresh owned sign-in shortcuts to the renamed launcher and icon; retire owned old desktop shortcuts when recreating them.
+- Synchronize side-by-side and stacked display transitions, numeric font sizes, value columns, reset-detail space and credit slots so mixed Codex/Claude panels stay aligned, including Mini. Separate windows retain independent sizing.
+- Automatically show stationary 5-hour, weekly and credit values across one row when resized wide and short; restore vertical rows when narrowed or made taller. No scrolling or animation.
+
 ## 2.2.2 — October 4, 2026
 
 - Restore Codex tray meters when choosing Open Codex Usage after opening Claude. Select shared Codex when local Codex is disabled.

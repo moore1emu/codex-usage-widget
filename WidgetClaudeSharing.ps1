@@ -244,7 +244,7 @@ function Update-SharedClaudeWindow {
     $bindings.planText.Visibility='Collapsed'; $bindings.compactRefreshButton.Visibility='Collapsed'
     $bindings.titleText.Text='CLAUDE'
     # Keep the existing restart launcher's title prefix so it closes every account window.
-    $peer.Title='Codex Usage - '+$script:SharedClaudeOptions.Name
+    $peer.Title='AI Usage Widget - '+$script:SharedClaudeOptions.Name
     $width=[Math]::Max(1,$peer.ActualWidth-14); $height=[Math]::Max(1,$peer.ActualHeight-14-$(if ($toolbar) {24} else {0}))
     $card=$script:AccountCards.SharedClaude; $card.Container.Visibility='Visible'
     $heading=Set-AccountHeadingSize $card $width $height

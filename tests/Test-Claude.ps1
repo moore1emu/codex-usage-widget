@@ -62,6 +62,51 @@ try {
     $script:CreditDisplayMode='Off';$script:SharedCreditDisplayMode='Off';Update-Display;$window.UpdateLayout()
     if ($script:AccountCards.Claude.Visual.Child.RowDefinitions[3].MinHeight -ne 0) { throw 'Hidden credits retained reserved space.' }
     $script:CreditDisplayMode='Available';$script:SharedCreditDisplayMode='Available'
+    # Reproduce mixed side-by-side content at the widths from the reported screenshots.
+    $script:SharedClaudeOptions.Enabled=$false
+    $script:RemoteUsage.primary.usedPercent=0;$script:RemoteUsage.credits=$null
+    $script:SharedCreditDisplayMode='Always'
+    $script:PrimaryResetHours=10;$script:SharedPrimaryResetHours=25;$script:ClaudeOptions.ResetHours=5
+    foreach ($connectedLayout in @('Side by side','Stacked')) {
+    $script:AccountLayout=$connectedLayout
+    $testBounds=if ($connectedLayout -eq 'Side by side') { @(@(470,330),@(420,285),@(375,265),@(300,160),@(225,85)) } else { @(@(166,916),@(148,781),@(134,721),@(109,430),@(84,229)) }
+    foreach ($bounds in $testBounds) {
+        $window.Width=$bounds[0];$window.Height=$bounds[1];$window.UpdateLayout();Update-Display;$window.UpdateLayout()
+        $reference=$script:AccountCards.Local
+        $mini=$reference.Bindings.ultraCompactPanel.Visibility -eq 'Visible'
+        foreach ($key in @('Remote','Claude')) {
+            $card=$script:AccountCards[$key]
+            if (($card.Bindings.ultraCompactPanel.Visibility -eq 'Visible') -ne $mini) { throw ('Connected columns changed display modes independently at '+($bounds -join 'x')) }
+            $controlsToCompare=if ($mini) {@('compactPrimaryPercent','compactSecondaryPercent')} else {@('primaryPercent','secondaryPercent','primaryBar','secondaryBar')}
+            foreach ($controlName in $controlsToCompare) {
+                $expected=$reference.Bindings[$controlName];$actual=$card.Bindings[$controlName]
+                $expectedPoint=$expected.TranslatePoint([Windows.Point]::new(0,0),$reference.Container)
+                $actualPoint=$actual.TranslatePoint([Windows.Point]::new(0,0),$card.Container)
+                if ([Math]::Abs($actualPoint.Y-$expectedPoint.Y) -gt 1 -or $actual.Visibility -ne $expected.Visibility) { throw ('Connected row drift: '+$key+' '+$controlName+' at '+($bounds -join 'x')) }
+                if ($controlName -like '*Percent' -and $actual.FontSize -ne $expected.FontSize) { throw 'Connected percentages used different font sizes.' }
+                if (-not $mini -and $controlName -like '*Percent' -and [Math]::Abs($actualPoint.X-$expectedPoint.X) -gt 1) { throw 'Connected value columns used different offsets.' }
+            }
+        }
+        if ($mini -and $script:AccountCards.Claude.Bindings.compactCreditsPanel.Visibility -ne 'Hidden') { throw 'Claude did not retain an invisible credit slot.' }
+    }
+    }
+    # Restore independent account choices before checking the remaining layouts.
+    $script:SharedClaudeOptions.Enabled=$true;$script:SharedCreditDisplayMode='Available'
+    $script:PrimaryResetHours=25;$script:SharedPrimaryResetHours=25;$script:ClaudeOptions.ResetHours=25
+    # Wide, short connected cards automatically form stationary horizontal metric rows.
+    $script:AccountLayout='Side by side';$window.Width=1100;$window.Height=100
+    $window.UpdateLayout();Update-Display;$window.UpdateLayout()
+    foreach ($key in @('Local','Remote','Claude','SharedClaude')) {
+        $card=$script:AccountCards[$key]
+        if ($card.Bindings.ultraCompactPanel.Child.ColumnDefinitions.Count -ne 3) { throw ('Horizontal metrics missing for '+$key) }
+        $first=$card.Bindings.compactPrimaryPercent.TranslatePoint([Windows.Point]::new(0,0),$card.Container)
+        $second=$card.Bindings.compactSecondaryPercent.TranslatePoint([Windows.Point]::new(0,0),$card.Container)
+        $third=$card.Bindings.compactCreditsText.TranslatePoint([Windows.Point]::new(0,0),$card.Container)
+        if ($first.X -ge $second.X -or $second.X -ge $third.X -or [Math]::Abs($first.Y-$second.Y) -gt 1 -or [Math]::Abs($first.Y-$third.Y) -gt 1) { throw ('Horizontal metrics failed to align for '+$key) }
+    }
+    # Narrowing restores vertical mini rows without retaining horizontal grid tracks.
+    Set-WidgetPreset 'Mini';$window.UpdateLayout();Update-Display;$window.UpdateLayout()
+    if ($script:AccountCards.Local.Bindings.ultraCompactPanel.Child.ColumnDefinitions.Count) { throw 'Horizontal layout did not revert after narrowing.' }
     # Every common layout must support all four sources and preserve distinct card names.
     foreach ($layout in @('Side by side','Stacked','Account picker','Separate windows')) {
         $script:AccountLayout=$layout
