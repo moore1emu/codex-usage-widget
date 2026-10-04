@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.3.0.
+This guide covers AI Usage Widget 2.4.0.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
@@ -101,7 +101,7 @@ Settings remains open without blocking either desktop window. Account picker lab
 
 Each account has separate **Use General defaults** switches for refresh, reset display and notifications. Codex accounts can also inherit credit display. Checked groups preview General's values and lock the account controls; unchecking restores custom values. **Apply** saves defaults and overrides without closing the dialog; **Cancel** discards changes made since the last Apply. Existing installations retain their account choices with inheritance off. Colors, names, account enable switches, connection files and publishing cadence remain independent. For shared sources, inherited refresh controls the input file-reading cadence.
 
-Wide, short windows automatically show static metric columns: 5-hour, weekly and credits when enabled. Account names remain above each group; unavailable/disabled Claude credits stay blank. There is no animation or scrolling. Narrowing or increasing height restores the vertical format.
+Wide, short windows automatically show static metric columns: 5-hour, weekly and credits when enabled. Account names remain above each group; unavailable/disabled Claude credits stay blank. There is no animation or scrolling. Shrinking to about menu-bar height puts each account name and its metrics on one line. As width decreases, countdowns drop before metric labels; names shorten only afterward. Full reset details remain available on hover, and the thin height is saved for reopening. Stacked accounts each retain one readable line. Increasing height restores the larger layouts.
 
 **Enable shared Codex account** unlocks its controls. Turning it off and applying stops file writing/reading, hides the second account, stops its alerts and file timers, and preserves all connection and account choices. The switch remains available while the rest of Shared is locked. Writing and reading have independent switches within the enabled tab.
 

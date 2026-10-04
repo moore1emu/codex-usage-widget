@@ -2,6 +2,13 @@
 
 [Back to README](README.md)
 
+## 2.4.0 — October 4, 2026
+
+- Stop settings flicker by applying inherited and connection-specific locks directly, without briefly re-enabling controls on every status tick.
+- Add a stationary menu-height line of account name, 5-hour percentage/countdown, weekly percentage/countdown and available credits. Hide countdowns before metric labels as width decreases.
+- Keep connected detail levels and cell spacing aligned, retain full reset details on hover, preserve saved thin heights, and keep stacked/detached windows readable.
+- Add regression checks for stable settings locks, progressive inline details, connected alignment and thin-height persistence.
+
 ## 2.3.0 — October 4, 2026
 
 - Rename the app to AI Usage Widget, including the main script, launchers, icon, window titles, new desktop shortcuts and documentation. Keep the GitHub repository name unchanged.

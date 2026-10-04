@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.3.0'
+$script:WidgetVersion = '2.4.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -138,7 +138,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AI Usage Widget" Width="280" Height="290" WindowStyle="None"
-        MinWidth="72" MinHeight="58" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResize"
+        MinWidth="72" MinHeight="28" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False">
   <Border x:Name="OuterBorder" CornerRadius="18" Background="#F2161A23" BorderBrush="#413D4658" BorderThickness="1" Padding="18">
     <Border.Effect>
@@ -244,6 +244,10 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
         </Grid>
       </Border>
 
+      <!-- Use one stationary line at menu-bar height; its cells are filled from the current account. -->
+      <Border x:Name="InlineUsagePanel" Grid.RowSpan="5" Visibility="Collapsed" VerticalAlignment="Center">
+        <Grid/>
+      </Border>
       <!-- Keep compact actions above dynamically added account cards so pointer clicks reach them. -->
       <Button x:Name="CompactRefreshButton" Panel.ZIndex="100" Grid.RowSpan="5" Content="↻" ToolTip="Refresh now"
               HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Visibility="Collapsed"
@@ -284,6 +288,7 @@ $ultraCompactPanel = $window.FindName('UltraCompactPanel')
 $compactPrimaryPercent = $window.FindName('CompactPrimaryPercent')
 $compactSecondaryPercent = $window.FindName('CompactSecondaryPercent')
 # Bind the reset labels used after the header and progress bars disappear.
+$inlineUsagePanel = $window.FindName('InlineUsagePanel')
 $compactPrimaryCaption = $window.FindName('CompactPrimaryCaption')
 $compactSecondaryCaption = $window.FindName('CompactSecondaryCaption')
 $compactPrimaryReset = $window.FindName('CompactPrimaryReset')
@@ -876,7 +881,82 @@ function Update-HoverControls {
     $compactRefreshButton.Margin = if ($showClose) { $refreshMargin } else { [System.Windows.Thickness]::new(0) }
 }
 
+function Show-InlineUsage {
+    # Reuse current percentage, countdown and balance text without polling or animation.
+    $grid=$inlineUsagePanel.Child
+    if (-not $grid.Children.Count) {
+        for ($index=0;$index -lt 9;$index++) {
+            $grid.ColumnDefinitions.Add([Windows.Controls.ColumnDefinition]::new())
+            $cell=[Windows.Controls.TextBlock]::new()
+            $cell.TextWrapping='NoWrap';$cell.TextTrimming='CharacterEllipsis'
+            $cell.VerticalAlignment='Center';$cell.Margin=[Windows.Thickness]::new(2,0,2,0)
+            [Windows.Controls.Grid]::SetColumn($cell,$index)
+            [void]$grid.Children.Add($cell)
+        }
+    }
+    $name=if ($script:RenderingAccountCard) {$script:RenderingAccountName} else {Get-AccountName 'Local'}
+    $texts=@($name,'5-hour',$compactPrimaryPercent.Text,$compactPrimaryReset.Text,'Weekly',$compactSecondaryPercent.Text,$compactSecondaryReset.Text,'Credits',$compactCreditsText.Text)
+    $hasCreditSlot=$script:CreditsVisible -or $script:ReserveCreditRow
+    $availableWidth=[Math]::Max(1,$window.ActualWidth-$(if ($script:RenderingAccountCard) {0} else {10}))
+    $unbounded=[Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity)
+    # Drop countdowns, then metric labels, before shortening names or reducing type.
+    foreach ($level in @('Full','NoResets','Values','ShortName','Tiny')) {
+        $widths=[double[]]::new(9)
+        for ($index=0;$index -lt 9;$index++) {
+            $cell=$grid.Children[$index];$cell.Text=[string]$texts[$index]
+            $cell.FontSize=if ($level -eq 'Tiny') {8} elseif ($index -in @(2,5,8)) {13} else {11}
+            $cell.FontWeight=if ($index -in @(2,5,8)) {'SemiBold'} else {'Normal'}
+            $cell.Foreground=switch ($index) {2 {$compactPrimaryPercent.Foreground} 5 {$compactSecondaryPercent.Foreground} 8 {$compactCreditsText.Foreground} 3 {'#8992A8'} 6 {'#8992A8'} default {'#DDE3EF'}}
+            $cell.MaxWidth=if ($index -eq 0) {switch ($level) {ShortName {24} Tiny {10} default {72}}} else {[double]::PositiveInfinity}
+            # Measure an invisible placeholder when another account requires the credit slot.
+            if ($index -eq 8 -and $hasCreditSlot -and -not $script:CreditsVisible) { $cell.Text='—' }
+            $visible=-not ($index -in @(3,6) -and $level -ne 'Full') -and -not ($index -in @(1,4,7) -and $level -in @('Values','ShortName','Tiny')) -and -not ($index -in @(7,8) -and -not $hasCreditSlot)
+            $cell.Visibility=if ($visible) {'Visible'} else {'Collapsed'}
+            if ($visible) {$cell.Measure($unbounded);$widths[$index]=$cell.DesiredSize.Width}
+        }
+        # Apply the widest cell requirements to every connected account.
+        if ($script:SharedAccountLayout) {
+            if ($script:ProbingAccountLayout) {
+                if (-not $script:SharedAccountLayout.InlineWidths.ContainsKey($level)) {$script:SharedAccountLayout.InlineWidths[$level]=[double[]]::new(9)}
+                for ($index=0;$index -lt 9;$index++) {$script:SharedAccountLayout.InlineWidths[$level][$index]=[Math]::Max($script:SharedAccountLayout.InlineWidths[$level][$index],$widths[$index])}
+            } else {$widths=$script:SharedAccountLayout.InlineWidths[$level]}
+        }
+        for ($index=0;$index -lt 9;$index++) {$grid.ColumnDefinitions[$index].Width=[Windows.GridLength]::new($widths[$index])}
+        if (-not $script:ProbingAccountLayout -and ($widths | Measure-Object -Sum).Sum -le $availableWidth) {break}
+    }
+    # Retain shared tracks without showing nonexistent credit values.
+    if (-not $script:CreditsVisible) {
+        foreach ($index in @(7,8)) {if ($grid.Children[$index].Visibility -eq 'Visible') {$grid.Children[$index].Visibility='Hidden'}}
+    }
+    foreach ($control in @($primaryArea,$secondaryArea,$creditsArea,$ultraCompactPanel,$dragArea,$footerArea,$compactRefreshButton)) {$control.Visibility='Collapsed'}
+    $outerBorder.Child.RowDefinitions[3].MinHeight=0
+    $outerBorder.Padding=[Windows.Thickness]::new($(if ($script:RenderingAccountCard) {0} else {4}))
+    $inlineUsagePanel.Visibility='Visible'
+    # Keep full reset details on hover after their inline text has dropped away.
+    $primaryDetails=if ($script:Usage.primary) {Get-ResetDetails -Quota $script:Usage.primary} else {''}
+    $weeklyDetails=if ($script:Usage.secondary) {Get-ResetDetails -Quota $script:Usage.secondary -Weekly} else {''}
+    $inlineUsagePanel.ToolTip=$name+[Environment]::NewLine+'5-hour: '+$compactPrimaryPercent.Text+' · '+$compactPrimaryReset.Text+' · '+$primaryDetails+[Environment]::NewLine+'Weekly: '+$compactSecondaryPercent.Text+' · '+$compactSecondaryReset.Text+' · '+$weeklyDetails
+    if ($script:CreditsVisible) {$inlineUsagePanel.ToolTip+=[Environment]::NewLine+'Credits: '+$compactCreditsText.Text}
+    Update-HoverControls
+}
+
 function Update-ResponsiveLayout {
+    # Allow a wide window to reach menu-bar height; narrow numeric badges retain their minimum height.
+    if (-not $script:RenderingAccountCard) {
+        $minimumHeight=if ($window.ActualWidth -ge 180) {28} else {58}
+        # Stacked accounts each need one readable line rather than sharing a single line's height.
+        if ($script:AccountLayout -eq 'Stacked' -and $window.ActualWidth -ge 180) {
+            $attachedCount=@(Get-EnabledAccounts | Where-Object {-not ($_ -eq 'Remote' -and $script:SeparateWindowsActive) -and -not ($_ -eq 'Claude' -and $script:ClaudeWindowActive) -and -not ($_ -eq 'SharedClaude' -and $script:SharedClaudeWindowActive)}).Count
+            if ($attachedCount -gt 1) {$minimumHeight=14+24*$attachedCount}
+        }
+        $window.MinHeight=$minimumHeight
+    }
+    $inlineUsagePanel.Visibility='Collapsed'
+    if ($window.ActualHeight -le 42 -and $window.ActualWidth -ge 80) {
+        Show-InlineUsage
+        if (-not $script:RenderingAccountCard) { Update-AccountViews }
+        return
+    }
     # Measure labeled rows before choosing a layout, rather than guessing a cutoff.
     $measureSize = [System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity)
     # Restore the normal numeric grid before measuring a new shape; horizontal mode is reversible.

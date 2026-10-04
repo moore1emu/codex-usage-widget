@@ -393,6 +393,17 @@ function Show-WidgetSettings {
     }
     # General defaults and account-specific inheritance switches share the existing draft lifecycle.
     $defaultsBindings = Add-GeneralDefaultsControls $tables $controls $settingsToolTip
+    # Controls with individual locks must never be temporarily re-enabled by a master-lock pass.
+    $defaultManagedControls=[Collections.Generic.HashSet[Windows.Forms.Control]]::new()
+    foreach ($account in $defaultsBindings.Values) {
+        foreach ($entry in $account.Values) {
+            [void]$defaultManagedControls.Add($entry.Check)
+            foreach ($item in $entry.Items.Values) { [void]$defaultManagedControls.Add($item.Control) }
+        }
+    }
+    $masterManagedControls=[Collections.Generic.HashSet[Windows.Forms.Control]]::new($defaultManagedControls)
+    foreach ($key in @('SharedEnabled','SharedLock','Name','ClaudeEnabled','ClaudeStatus','ClaudeConnect','ClaudeSize','SharedClaudeEnabled','SharedClaudeStatus','SharedClaudeName')) { [void]$masterManagedControls.Add($controls[$key]) }
+    foreach ($kind in @('Read','Write')) { foreach ($suffix in @('Path','Browse','Interval')) { [void]$masterManagedControls.Add($controls['SharedClaude'+$kind+$suffix]);[void]$masterManagedControls.Add($controls[$kind+$suffix]) } }
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
         # Validate Claude sharing paths before applying any draft account switches.
@@ -526,14 +537,14 @@ function Show-WidgetSettings {
         # Show draft cadence alongside live operation status while the dialog is open.
         # Lock every Shared setting except the master switch, retaining all selections.
         $sharedOn = $controls.SharedEnabled.Checked
-        foreach ($control in $tables.Shared.Controls) { $control.Enabled = $sharedOn }
+        foreach ($control in $tables.Shared.Controls) { if (-not $masterManagedControls.Contains($control)) { $control.Enabled = $sharedOn } }
         $controls.SharedEnabled.Enabled = $true
         $controls.SharedLock.Enabled = $true
         $controls.SharedLock.Text = if ($sharedOn) { 'Unlocked - Shared is enabled' } else { 'Locked - enable Shared to change settings' }
         $base = @(1,5,15,30,0)[$controls.Refresh.SelectedIndex]
         foreach ($kind in @('Write','Read')) {
             $enabled = $sharedOn -and $controls[$kind + 'Enabled'].Checked
-            foreach ($suffix in @('Path','Browse','Interval')) { $controls[$kind + $suffix].Enabled = $enabled }
+            foreach ($suffix in @('Path','Browse','Interval')) { $connectionControl=$controls[$kind+$suffix];if (-not $defaultManagedControls.Contains($connectionControl)) { $connectionControl.Enabled=$enabled } }
             $selected = $intervalValues[$controls[$kind + 'Interval'].SelectedIndex]
             $cadence = if ($selected -eq -1) { "matches widget: $base min (0 = manual)" } elseif ($selected -eq 0) { 'manual only' } else { "every $selected min · separate timer" }
             $controls[$kind + 'Status'].Text = (Get-SharingStatus $kind) + ' | Selected: ' + $cadence
@@ -541,18 +552,18 @@ function Show-WidgetSettings {
         $controls.Name.Enabled = $sharedOn -and $controls.WriteEnabled.Checked
         $controls.Account.Enabled = $controls.Layout.SelectedItem -eq 'Account picker'
         # A disabled Claude source locks its drafts while preserving every saved value.
-        foreach ($control in $tables.Claude.Controls) {$control.Enabled=$controls.ClaudeEnabled.Checked}
+        foreach ($control in $tables.Claude.Controls) {if (-not $masterManagedControls.Contains($control)) {$control.Enabled=$controls.ClaudeEnabled.Checked}}
         $controls.ClaudeEnabled.Enabled=$true
         $controls.ClaudeStatus.Enabled=$true
         $controls.ClaudeConnect.Enabled=$controls.ClaudeEnabled.Checked -and $script:ClaudeOptions.Enabled
         $controls.ClaudeStatus.Text=if (-not $controls.ClaudeEnabled.Checked) {'Disabled'} elseif (-not $script:ClaudeOptions.Enabled) {'Apply to enable Claude, then Connect'} else {$script:ClaudeStatus}
         $controls.ClaudeSize.Enabled=$controls.ClaudeEnabled.Checked -and ($controls.ClaudePlacement.SelectedItem -eq 'Separate window' -or ($controls.ClaudePlacement.SelectedItem -eq 'Follow layout' -and $controls.Layout.SelectedItem -eq 'Separate windows'))
         # The imported Claude master switch locks all associated drafts without losing them.
-        foreach ($control in $tables['Shared Claude'].Controls) {$control.Enabled=$controls.SharedClaudeEnabled.Checked}
+        foreach ($control in $tables['Shared Claude'].Controls) {if (-not $masterManagedControls.Contains($control)) {$control.Enabled=$controls.SharedClaudeEnabled.Checked}}
         $controls.SharedClaudeEnabled.Enabled=$true;$controls.SharedClaudeStatus.Enabled=$true
         $controls.SharedClaudeName.Enabled=$false;$controls.SharedClaudeName.Text=$script:SharedClaudeOptions.Name
         $controls.SharedClaudeStatus.Text=($script:ClaudeReadStatus+' | '+$script:ClaudeWriteStatus)
-        foreach ($kind in @('Read','Write')) {foreach ($suffix in @('Path','Browse','Interval')) {$controls['SharedClaude'+$kind+$suffix].Enabled=$controls.SharedClaudeEnabled.Checked -and $controls['SharedClaude'+$kind+'Enabled'].Checked}}
+        foreach ($kind in @('Read','Write')) {foreach ($suffix in @('Path','Browse','Interval')) {$connectionControl=$controls['SharedClaude'+$kind+$suffix];if (-not $defaultManagedControls.Contains($connectionControl)) {$connectionControl.Enabled=$controls.SharedClaudeEnabled.Checked -and $controls['SharedClaude'+$kind+'Enabled'].Checked}}}
         $controls.SourceStatus.Text = Get-SharingStatus Source
         Update-DefaultsControls $controls $defaultsBindings
     }

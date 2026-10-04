@@ -32,6 +32,15 @@ try {
     $settings=$settings.Replace('[Windows.Threading.Dispatcher]::PushFrame($settingsFrame)',@'
     try {
         if (($tabs.TabPages.Text -join ',') -ne 'General,Codex,Shared Codex,Claude,Shared Claude') { throw 'General/provider tab names changed.' }
+        # Stable inherited locks must never toggle twice during a status tick and cause flashing.
+        $controls.SharedEnabled.Checked=$true;$controls.ReadEnabled.Checked=$true
+        $controls.RemoteUseRefresh.Checked=$true
+        & $updateStatus
+        $script:DefaultLockTransitions=0
+        $controls.ReadInterval.Add_EnabledChanged({$script:DefaultLockTransitions++})
+        for ($tick=0;$tick -lt 4;$tick++) { & $updateStatus }
+        if ($script:DefaultLockTransitions) {throw 'Status updates toggled an inherited shared control.'}
+        $controls.RemoteUseRefresh.Checked=$false;$controls.ReadEnabled.Checked=$false;$controls.SharedEnabled.Checked=$false
         $controls.Refresh.SelectedIndex=0
         $controls.DefaultRefresh.SelectedIndex=2
         $controls.LocalUseRefresh.Checked=$true

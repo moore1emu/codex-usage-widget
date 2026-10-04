@@ -104,6 +104,38 @@ try {
         $third=$card.Bindings.compactCreditsText.TranslatePoint([Windows.Point]::new(0,0),$card.Container)
         if ($first.X -ge $second.X -or $second.X -ge $third.X -or [Math]::Abs($first.Y-$second.Y) -gt 1 -or [Math]::Abs($first.Y-$third.Y) -gt 1) { throw ('Horizontal metrics failed to align for '+$key) }
     }
+    # A menu-height window places names, labels, percentages and countdowns on one line.
+    $ribbonStates=@()
+    foreach ($width in @(1800,1200,800,500,360)) {
+        $window.Width=$width;$window.Height=32;$window.UpdateLayout();Update-Display;$window.UpdateLayout()
+        $reference=$script:AccountCards.Local.Bindings.inlineUsagePanel.Child
+        $ribbonStates+=,@{Reset=$reference.Children[3].Visibility;Label=$reference.Children[1].Visibility}
+        foreach ($key in @('Local','Remote','Claude','SharedClaude')) {
+            $card=$script:AccountCards[$key];$grid=$card.Bindings.inlineUsagePanel.Child
+            if ($card.Bindings.inlineUsagePanel.Visibility -ne 'Visible' -or $card.HeadingPanel.Visibility -ne 'Collapsed') {throw ('Menu-height account name was not inline: '+$key+'; height='+$window.ActualHeight+'; minimum='+$window.MinHeight+'; inline='+$card.Bindings.inlineUsagePanel.Visibility+'; heading='+$card.HeadingPanel.Visibility)}
+            if ($grid.Children[0].Text -ne (Get-AccountName $key)) {throw 'Menu-height account name was lost.'}
+            foreach ($index in @(1,2,3,4,5,6)) {
+                if ($grid.Children[$index].Visibility -ne $reference.Children[$index].Visibility) {throw 'Connected inline details disappeared independently.'}
+                $point=$grid.Children[$index].TranslatePoint([Windows.Point]::new(0,0),$grid)
+                if ($grid.Children[$index].Visibility -eq 'Visible' -and [Math]::Abs($point.Y-$reference.Children[$index].TranslatePoint([Windows.Point]::new(0,0),$reference).Y) -gt 1) {throw 'Inline metrics drifted vertically.'}
+            }
+            $totalWidth=($grid.ColumnDefinitions | ForEach-Object {$_.Width.Value} | Measure-Object -Sum).Sum
+            if ($totalWidth -gt $card.Container.ActualWidth+1) {throw ('Inline text overflowed its account: '+$width+' '+$key+' '+$totalWidth)}
+        }
+    }
+    if ($ribbonStates[0].Reset -ne 'Visible' -or $ribbonStates[-1].Label -ne 'Collapsed') {throw 'Inline details did not progressively shrink.'}
+    if (-not @($ribbonStates | Where-Object {$_.Reset -eq 'Collapsed' -and $_.Label -eq 'Visible'}).Count) {throw 'Inline labels disappeared before countdowns.'}
+    # Restoring a saved thin window preserves its height instead of expanding it to the old minimum.
+    Restore-AccountWindowBounds $window @{width=800;height=32;left=100;top=100;topmost=$false}
+    $window.UpdateLayout();Update-Display;$window.UpdateLayout();Save-WidgetState
+    if ($window.Height -ne 32 -or (Get-Content -LiteralPath $script:StatePath -Raw | ConvertFrom-Json).height -ne 32) {throw 'Thin bar height did not survive restoration and persistence.'}
+    # Stacked mode gives each account its own readable inline row and matching detail level.
+    $script:AccountLayout='Stacked';$window.Width=450;$window.Height=120
+    $window.UpdateLayout();Update-Display;$window.UpdateLayout()
+    foreach ($key in @('Local','Remote','Claude','SharedClaude')) {
+        if ($script:AccountCards[$key].Bindings.inlineUsagePanel.Visibility -ne 'Visible') {throw 'Stacked thin account was not inline.'}
+    }
+    $script:AccountLayout='Side by side'
     # Narrowing restores vertical mini rows without retaining horizontal grid tracks.
     Set-WidgetPreset 'Mini';$window.UpdateLayout();Update-Display;$window.UpdateLayout()
     if ($script:AccountCards.Local.Bindings.ultraCompactPanel.Child.ColumnDefinitions.Count) { throw 'Horizontal layout did not revert after narrowing.' }

@@ -118,7 +118,7 @@ function Render-AccountCard {
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
     $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; Topmost=$true }
-    $original = @{ SharedAccountLayout=$script:SharedAccountLayout; ProbingAccountLayout=$script:ProbingAccountLayout; ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
+    $original = @{ SharedAccountLayout=$script:SharedAccountLayout; ProbingAccountLayout=$script:ProbingAccountLayout; RenderingAccountName=$script:RenderingAccountName; ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
         $script:RenderingAccountCard = $true
@@ -127,6 +127,7 @@ function Render-AccountCard {
         # Measure connected columns first, then apply the same fit decisions to every account.
         $script:SharedAccountLayout = $SharedLayout
         $script:ProbingAccountLayout = [bool]$ProbeLayout
+        $script:RenderingAccountName = $Name
         $script:Usage = if ($Snapshot) { $Snapshot } else { @{primary=$null;secondary=$null;credits=$null} }
         $script:RefreshError = $null
         # Each imported card uses its own display preferences while local rendering stays intact.
@@ -173,21 +174,24 @@ function Update-AccountViews {
     if (-not $keys.Count -and $window.IsLoaded) {$script:AutomaticallyHiddenHost=$true;$window.Hide()}
     elseif ($keys.Count -and $script:AutomaticallyHiddenHost) {$script:AutomaticallyHiddenHost=$false;$window.Show()}
     $script:AccountsHost.Visibility = if ($originalSingle) { 'Collapsed' } else { 'Visible' }
-    $window.MinWidth=if ($script:AccountLayout -eq 'Side by side' -and -not $originalSingle) { [Math]::Max(72,75*$keys.Count) } else {72}
+    $window.MinWidth=if ($script:AccountLayout -eq 'Side by side' -and -not $originalSingle) { [Math]::Max(72,$(if ($window.ActualHeight -le 42) {90} else {75})*$keys.Count) } else {72}
     $closeButton.ToolTip=if ($script:SeparateWindowsActive -or $script:ClaudeWindowActive) {'Hide this account to tray'} else {'Close AI Usage Widget'}
     $hoverCloseButton.ToolTip=$closeButton.ToolTip
     if ($originalSingle) { return }
-    foreach ($control in @($primaryArea,$secondaryArea,$creditsArea,$ultraCompactPanel,$footerArea)) { $control.Visibility='Collapsed' }
+    foreach ($control in @($primaryArea,$secondaryArea,$creditsArea,$ultraCompactPanel,$inlineUsagePanel,$footerArea)) { $control.Visibility='Collapsed' }
     # Reserve only one toolbar; each card retains its account name while shrinking.
-    $outerBorder.Padding=[Windows.Thickness]::new(6)
+    # Preserve usable text height at menu-bar size instead of spending it on nested padding.
+    $thinHost=$window.ActualHeight -le 42
+    $outerBorder.Padding=[Windows.Thickness]::new($(if ($thinHost) {2} else {6}))
+    $hostPadding=if ($thinHost) {6} else {14}
     $planText.Visibility='Collapsed'
     $titleText.Text=if ($window.ActualWidth -ge 250) {'USAGE'} else {'USAGE'}
     $dragArea.Height=[double]::NaN
     $toolbar=$window.ActualWidth -ge 180 -and $window.ActualHeight -ge 125
     $dragArea.Visibility=if ($toolbar) {'Visible'} else {'Collapsed'}
     $compactRefreshButton.Visibility='Collapsed'
-    $width=[Math]::Max(1,$window.ActualWidth-14)
-    $height=[Math]::Max(1,$window.ActualHeight-14-$(if ($toolbar) {24} else {0}))
+    $width=[Math]::Max(1,$window.ActualWidth-$hostPadding)
+    $height=[Math]::Max(1,$window.ActualHeight-$hostPadding-$(if ($toolbar) {24} else {0}))
     $picker=$script:AccountLayout -eq 'Account picker'
     $signature=$script:AccountLayout + ':' + ($keys -join ',')
     # Rebuild tracks only when layout or enabled sources change, not on countdown ticks.
@@ -231,7 +235,7 @@ function Update-AccountViews {
     }
     # Share only presentation measurements; separate windows and other layouts remain independent.
     $sharedLayout = if ($script:AccountLayout -in @('Side by side','Stacked') -and $keys.Count -gt 1) {
-        @{Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20}
+        @{Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
     } else { $null }
     $passes = if ($sharedLayout) { @('Measure','Apply') } else { @('Apply') }
     foreach ($pass in $passes) {
@@ -307,6 +311,8 @@ function Resize-AccountWindow {
     param($Target,[string]$Corner,[double]$HorizontalChange,[double]$VerticalChange)
     # Anchor the opposite edge and clamp size so both corners behave consistently at minimum size.
     $width = [Math]::Max($Target.MinWidth,$Target.Width + $(if ($Corner -eq 'Left') { -$HorizontalChange } else { $HorizontalChange }))
+    # Detached narrow badges keep their readable minimum while wide windows can become thin bars.
+    if (-not [object]::ReferenceEquals($Target,$script:window)) { $Target.MinHeight=if ($width -ge 180) {28} else {58} }
     $height = [Math]::Max($Target.MinHeight,$Target.Height + $VerticalChange)
     # Avoid scheduling intermediate saves while one corner movement updates several properties.
     $previousResize = $script:ResizingAccountWindow
@@ -348,7 +354,10 @@ function Restore-AccountWindowBounds {
         }
     } catch { return }
     $Target.Width = [Math]::Min(3000,[Math]::Max(72,[double]$Bounds.width))
-    $Target.Height = [Math]::Min(3000,[Math]::Max(58,[double]$Bounds.height))
+    # Preserve saved menu-height bars while retaining the taller minimum for narrow badges.
+    $minimumHeight=if ($Target.Width -ge 180) {28} else {58}
+    $Target.MinHeight=$minimumHeight
+    $Target.Height = [Math]::Min(3000,[Math]::Max($minimumHeight,[double]$Bounds.height))
     $screenLeft = [Windows.SystemParameters]::VirtualScreenLeft
     $screenTop = [Windows.SystemParameters]::VirtualScreenTop
     $Target.Left = [Math]::Max($screenLeft,[Math]::Min([double]$Bounds.left,$screenLeft + [Windows.SystemParameters]::VirtualScreenWidth - $Target.Width))
