@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.4.0'
+$script:WidgetVersion = '2.4.1'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -1265,7 +1265,12 @@ function Update-SelectedTrayIcon {
 }
 
 function Format-ResetCountdown {
-    param([long] $UnixSeconds, [switch] $Compact, [switch] $CountdownOnly)
+    param([long] $UnixSeconds, [switch] $Compact, [switch] $CountdownOnly, $PrimaryQuota)
+    # A full five-hour allowance has not started its usage window yet.
+    if ($PrimaryQuota -and $null -ne $PrimaryQuota.usedPercent -and [double]$PrimaryQuota.usedPercent -eq 0) {
+        if ($Compact) { return 'Not started' }
+        return 'Reset starts after usage'
+    }
     # Use short placeholders when the badge has little room.
     if ($UnixSeconds -le 0) { if ($Compact) { return '—' }; return 'Reset time unavailable' }
     $reset = [DateTimeOffset]::FromUnixTimeSeconds($UnixSeconds).ToLocalTime()
@@ -1295,6 +1300,8 @@ function Format-ResetCountdown {
 
 function Get-ResetDetails {
     param($Quota, [switch] $Weekly, [switch] $NextOnly, [DateTimeOffset] $Now = [DateTimeOffset]::Now)
+    # Suppress five-hour clock estimates until the account starts using its allowance.
+    if (-not $Weekly -and $Quota -and $null -ne $Quota.usedPercent -and [double]$Quota.usedPercent -eq 0) { return '' }
     # Do not project unknown, expired, or malformed server reset timestamps.
     $stamp = [long]0
     if (-not $Quota -or -not [long]::TryParse([string]$Quota.resetsAt, [ref]$stamp) -or $stamp -le 0) { return '' }
@@ -1343,13 +1350,15 @@ function Update-ResetLabels {
         )) {
             $control = $entry.Control
             $quota = $entry.Quota
-            $countdown = if ($quota -and $null -ne $quota.usedPercent) { Format-ResetCountdown -UnixSeconds ([long]$quota.resetsAt) -CountdownOnly } else { $entry.Missing }
+            $countdown = if ($quota -and $null -ne $quota.usedPercent) { Format-ResetCountdown -UnixSeconds ([long]$quota.resetsAt) -CountdownOnly -PrimaryQuota $(if (-not $entry.Weekly) { $quota }) } else { $entry.Missing }
             # Shorten only the countdown when necessary; the reset details get their own wrapped space.
             $control.MaxWidth = [double]::PositiveInfinity
             $control.Text = $countdown
             $control.Measure($unbounded)
             if ($quota -and $control.DesiredSize.Width -gt $availableWidth) {
-                $countdown = 'Resets in ' + (Format-ResetCountdown -UnixSeconds ([long]$quota.resetsAt) -Compact)
+                $shortCountdown = Format-ResetCountdown -UnixSeconds ([long]$quota.resetsAt) -Compact -PrimaryQuota $(if (-not $entry.Weekly) { $quota })
+                # Keep the idle explanation grammatical when shrinking the reset label.
+                $countdown = if ($shortCountdown -eq 'Not started') { $shortCountdown } else { 'Resets in ' + $shortCountdown }
             }
             $details = if ($detailLevel -ne 'Countdown' -and $quota -and $null -ne $quota.usedPercent) {
                 Get-ResetDetails -Quota $quota -Weekly:$entry.Weekly -NextOnly:($detailLevel -eq 'Next')
@@ -1413,7 +1422,7 @@ function Update-Display {
         $primaryPercent.Text = ('{0:N0}% left' -f $primaryRemaining)
         $primaryBar.Value = $primaryRemaining
         # Keep the server's reset time for the countdown.
-        $primaryReset.Text = Format-ResetCountdown -UnixSeconds ([long] $primary.resetsAt)
+        $primaryReset.Text = Format-ResetCountdown -UnixSeconds ([long] $primary.resetsAt) -PrimaryQuota $primary
     }
     else {
         # Preserve the unavailable state instead of implying full quota.
@@ -1442,7 +1451,7 @@ function Update-Display {
     $compactPrimaryPercent.Text = if ($primary -and $null -ne $primary.usedPercent) { '{0:N0}%' -f $primaryRemaining } else { '—' }
     $compactSecondaryPercent.Text = if ($secondary -and $null -ne $secondary.usedPercent) { '{0:N0}%' -f $secondaryRemaining } else { '—' }
     # Update the compact countdowns each second and expose the full reset time on hover.
-    $compactPrimaryReset.Text = if ($primary) { Format-ResetCountdown -UnixSeconds ([long] $primary.resetsAt) -Compact } else { '—' }
+    $compactPrimaryReset.Text = if ($primary) { Format-ResetCountdown -UnixSeconds ([long] $primary.resetsAt) -PrimaryQuota $primary -Compact } else { '—' }
     $compactSecondaryReset.Text = if ($secondary) { Format-ResetCountdown -UnixSeconds ([long] $secondary.resetsAt) -Compact } else { '—' }
     # Recheck fit as countdown text changes, including after a reset.
     Update-ResponsiveLayout

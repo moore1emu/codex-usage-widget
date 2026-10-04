@@ -2,7 +2,7 @@
 
 A small Windows desktop and tray widget for **Codex and Claude subscription usage left**, reset times, credits where available, and notifications. Show local accounts and accounts from another computer through private shared JSON files.
 
-**Version 2.4.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.4.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 

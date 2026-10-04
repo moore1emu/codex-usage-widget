@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.4.1 — October 4, 2026
+
+- Suppress five-hour countdowns and projected reset times while 100% remains; show “Reset starts after usage” (compact: “Not started”) until actual usage begins. Weekly resets remain independent.
+- Export unused five-hour reset timestamps as zero, so drifting server timestamps no longer cause extra OneDrive writes or update the last usage-change time. Retain the 30-minute check-in.
+- Verify idle reset drift, restart recovery, first-use restoration, and independent weekly resets.
+
 ## 2.4.0 — October 4, 2026
 
 - Stop settings flicker by applying inherited and connection-specific locks directly, without briefly re-enabling controls on every status tick.

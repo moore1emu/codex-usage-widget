@@ -29,6 +29,15 @@ try {
         if ($converted.primary.resetsAt -ne $epoch) { throw 'Claude reset timezone changed during normalization.' }
         if ((Format-ResetCountdown $converted.primary.resetsAt) -like '*Resetting now*') { throw 'A future Claude reset was treated as expired.' }
     }
+    # Unused five-hour windows suppress countdowns and projections without changing weekly behavior.
+    $idleQuota=@{usedPercent=0;resetsAt=[DateTimeOffset]::Now.AddHours(5).ToUnixTimeSeconds();windowDurationMins=300}
+    if ((Format-ResetCountdown $idleQuota.resetsAt -PrimaryQuota $idleQuota) -ne 'Reset starts after usage' -or
+        (Format-ResetCountdown $idleQuota.resetsAt -PrimaryQuota $idleQuota -Compact) -ne 'Not started' -or
+        (Get-ResetDetails $idleQuota) -ne '') {throw 'Unused five-hour reset still displays a countdown or schedule.'}
+    if ((Get-ResetDetails $idleQuota -Weekly) -eq '') {throw 'Full weekly allowance lost its reset date.'}
+    $idleQuota.usedPercent=0.1
+    if ((Format-ResetCountdown $idleQuota.resetsAt -PrimaryQuota $idleQuota) -notlike 'Resets in*' -or
+        (Get-ResetDetails $idleQuota) -eq '') {throw 'Active five-hour allowance did not restore reset details.'}
     # Pin the reported Denver 5 PM weekly case independently of the test computer timezone.
     $weekly = ConvertTo-ClaudeUsage ('{"seven_day":{"utilization":5,"resets_at":"2026-10-08T23:00:00Z"}}' | ConvertFrom-Json)
     $denver = [TimeZoneInfo]::FindSystemTimeZoneById('Mountain Standard Time')

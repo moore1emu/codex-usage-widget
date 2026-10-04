@@ -61,5 +61,26 @@ Read-SharedUsage
 if (-not $script:ReadError -or -not [object]::ReferenceEquals($cached,$script:RemoteUsage)) {throw 'Partial sync erased the cached reading.'}
 Write-Output 'PASS: change-only publication, unchanged Force/restart, usage versus metadata timestamps, 30-minute matched check-ins, manual-only behavior, unchanged-file read cache, stale detection, notification freshness, and partial sync retention.'
 
+# Full allowance must ignore drifting primary resets, including across publication restarts.
+$script:Usage.primary.usedPercent=0
+$script:Usage.primary.resetsAt=$now+10000
+Write-SharedUsage
+$idleExport=[IO.File]::ReadAllText($script:UsageOutputPath)
+if (($idleExport | ConvertFrom-Json).usage.primary.resetsAt -ne 0) {throw 'Unused five-hour reset was exported.'}
+$script:Usage.primary.resetsAt=$now+11000
+Write-SharedUsage -Force
+if ([IO.File]::ReadAllText($script:UsageOutputPath) -ne $idleExport) {throw 'Drifting unused reset rewrote the export.'}
+$script:PublishedTarget='';$script:PublishedUsageKey=$null;$script:LastWrittenAt=$null
+Write-SharedUsage
+if ([IO.File]::ReadAllText($script:UsageOutputPath) -ne $idleExport) {throw 'Unused reset drift rewrote the export after restart.'}
+# The first real usage restores the reported reset; weekly changes still publish while idle.
+$script:Usage.primary.usedPercent=0.1
+Write-SharedUsage
+if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.primary.resetsAt -ne $now+11000) {throw 'Active five-hour reset was not restored.'}
+$script:Usage.primary.usedPercent=0;Write-SharedUsage
+$script:Usage.secondary.resetsAt+=60;Write-SharedUsage
+if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.secondary.resetsAt -ne $script:Usage.secondary.resetsAt) {throw 'Weekly reset changes were ignored while primary was unused.'}
+Write-Output 'PASS: unused five-hour reset normalization, drift suppression, restart recovery, active-window restoration and independent weekly changes.'
+
 # Report temporary artifacts without adding account readings to the checkout.
 Write-Output ('Temporary test files: ' + $folder)

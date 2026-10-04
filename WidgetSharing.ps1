@@ -88,6 +88,8 @@ function ConvertTo-SharedUsage {
             if (-not [long]::TryParse([string]$quota.resetsAt, [ref]$reset) -or $reset -lt 0) { throw 'A reset timestamp is invalid.' }
             try { [void][DateTimeOffset]::FromUnixTimeSeconds($reset) } catch { throw 'A reset timestamp is invalid.' }
         }
+        # An unused five-hour window has no active reset; ignore its moving server timestamp.
+        if ($name -eq 'primary' -and $null -ne $used -and $used -eq 0) { $reset = 0 }
         # Duration is used only for projecting later reset times; ignore unsupported values.
         $duration = [double]0
         if (-not [double]::TryParse([string]$quota.windowDurationMins, [ref]$duration) -or $duration -le 0 -or $duration -gt 10080 -or [double]::IsNaN($duration)) { $duration = 0 }
