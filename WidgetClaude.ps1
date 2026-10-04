@@ -31,7 +31,17 @@ function ConvertTo-ClaudeUsage {
         $reset = $null
         if ($quota.resets_at) {
             $date = [DateTimeOffset]::MinValue
-            if (-not [DateTimeOffset]::TryParse([string]$quota.resets_at,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal,[ref]$date)) { throw 'Claude returned an invalid reset date.' }
+            # Preserve typed JSON dates instead of reinterpreting their local clock time as UTC.
+            if ($quota.resets_at -is [DateTimeOffset]) {
+                $date = $quota.resets_at
+            } elseif ($quota.resets_at -is [DateTime]) {
+                $instant = $quota.resets_at
+                # Offset-free API dates represent UTC; local and UTC dates retain their existing kind.
+                if ($instant.Kind -eq [DateTimeKind]::Unspecified) { $instant = [DateTime]::SpecifyKind($instant,[DateTimeKind]::Utc) }
+                $date = [DateTimeOffset]::new($instant)
+            } elseif (-not [DateTimeOffset]::TryParse([string]$quota.resets_at,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal,[ref]$date)) {
+                throw 'Claude returned an invalid reset date.'
+            }
             $reset = $date.ToUnixTimeSeconds()
         }
         $snapshot[$entry.Key] = @{usedPercent=$used;resetsAt=$reset;windowDurationMins=$entry.Minutes}

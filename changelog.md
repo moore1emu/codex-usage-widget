@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.2.1 — October 4, 2026
+
+- Preserve Claude reset timestamp timezones after JSON parsing, fixing early weekly times and premature “Resetting now” countdowns.
+- Align weekly rows across side-by-side accounts when Codex credits are displayed, without adding a Claude credit balance.
+- Add timestamp normalization and account-row alignment regression checks.
+
 ## 2.2.0 — October 4, 2026
 
 - Add optional Claude subscription usage through a dedicated signed-in WebView2 Usage window, independent refresh/reset settings, palettes and notifications. Keep unknown quotas unknown and handle expired sessions, timeouts and rate limits.

@@ -114,14 +114,16 @@ function Set-AccountHeadingSize {
 }
 
 function Render-AccountCard {
-    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote, [switch] $Claude, [switch] $SharedClaude)
+    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote, [switch] $Claude, [switch] $SharedClaude, [switch] $ReserveCreditRow)
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
     $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; Topmost=$true }
-    $original = @{ Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
+    $original = @{ ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
         $script:RenderingAccountCard = $true
+        # Keep weekly rows level with adjacent Codex cards that display credits.
+        $script:ReserveCreditRow = [bool]$ReserveCreditRow
         $script:Usage = if ($Snapshot) { $Snapshot } else { @{primary=$null;secondary=$null;credits=$null} }
         $script:RefreshError = $null
         # Each imported card uses its own display preferences while local rendering stays intact.
@@ -212,6 +214,18 @@ function Update-AccountViews {
     }
     $script:AccountPicker.Visibility=if ($picker -and $width -ge 100 -and $keys.Count) {'Visible'} else {'Collapsed'}
     if ($picker) { $script:AccountsHost.RowDefinitions[0].Height=[Windows.GridLength]::new($(if ($script:AccountPicker.Visibility -eq 'Visible') {29} else {0})); $height-=$script:AccountsHost.RowDefinitions[0].Height.Value }
+    # Reserve equal credit space across attached columns without inventing Claude balances.
+    $reserveCredits = $false
+    if ($script:AccountLayout -eq 'Side by side') {
+        foreach ($source in @('Local','Remote')) {
+            if ($source -notin $keys) { continue }
+            $creditMode = if ($source -eq 'Local') { $script:CreditDisplayMode } else { $script:SharedCreditDisplayMode }
+            $creditSnapshot = if ($source -eq 'Local') { $script:Usage } else { $script:RemoteUsage }
+            $balance = [decimal]0
+            $hasBalance = $creditSnapshot.credits -and [decimal]::TryParse([string]$creditSnapshot.credits.balance,[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$balance)
+            if ($creditMode -eq 'Always' -or ($creditMode -eq 'Available' -and ($creditSnapshot.credits.unlimited -eq $true -or ($hasBalance -and $balance -gt 0)))) { $reserveCredits = $true }
+        }
+    }
     foreach ($key in @('Local','Remote','Claude','SharedClaude')) {
         $card=$script:AccountCards[$key]
         # Detached cards stay under their own shell; disabled cards collapse without stale values.
@@ -228,7 +242,7 @@ function Update-AccountViews {
             SharedClaude {$snapshot=$script:SharedClaudeUsage;$scheme=$script:SharedClaudeOptions.Scheme;$status=$script:SharedClaudeStatus}
         }
         $plan=if ($snapshot.planType) {([string]$snapshot.planType).ToUpperInvariant()+' · '} else {''}
-        Render-AccountCard -Remote:($key -eq 'Remote') -Claude:($key -eq 'Claude') -SharedClaude:($key -eq 'SharedClaude') -Card $card -Snapshot $snapshot -Name (Get-AccountName $key) -Status ($plan+$status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight-$heading))
+        Render-AccountCard -ReserveCreditRow:$reserveCredits -Remote:($key -eq 'Remote') -Claude:($key -eq 'Claude') -SharedClaude:($key -eq 'SharedClaude') -Card $card -Snapshot $snapshot -Name (Get-AccountName $key) -Status ($plan+$status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight-$heading))
     }
     # With no attached account, Settings and the tray remain available to re-enable sources.
     $script:AccountsHost.ToolTip=if (-not $keys.Count) {'No attached accounts enabled. Open Settings from the tray.'} else {$null}

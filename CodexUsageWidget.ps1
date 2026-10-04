@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.2.0'
+$script:WidgetVersion = '2.2.1'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -885,7 +885,7 @@ function Update-ResponsiveLayout {
     Update-ResetLabels
     # Reserve the actual reset text height, the existing 27px value row, and 5px row margins.
     $resetHeight = [Math]::Ceiling([Math]::Max($primaryReset.DesiredSize.Height, $secondaryReset.DesiredSize.Height))
-    $creditHeight = if ($script:CreditsVisible) { 32 } else { 0 }
+    $creditHeight = if ($script:CreditsVisible -or $script:ReserveCreditRow) { 32 } else { 0 }
     $labeledHeight = 2 * (27 + 5 + $resetHeight) + $creditHeight
     $ultraCompact = $window.ActualWidth -lt ($requiredWidth + 14) -or $window.ActualHeight -lt ($labeledHeight + 14)
     # Hide bars only after the essential labeled rows consume the available height.
@@ -898,6 +898,8 @@ function Update-ResponsiveLayout {
     $primaryArea.Visibility = if ($ultraCompact) { 'Collapsed' } else { 'Visible' }
     $secondaryArea.Visibility = if ($ultraCompact) { 'Collapsed' } else { 'Visible' }
     $creditsArea.Visibility = if ($script:CreditsVisible -and -not $ultraCompact) { 'Visible' } else { 'Collapsed' }
+    # Numeric mini views reclaim blank credit space; labeled columns retain their alignment.
+    $outerBorder.Child.RowDefinitions[3].MinHeight = if ($script:ReserveCreditRow -and -not $ultraCompact) { 32 } else { 0 }
     # Reset reservations before calculating the refresh-only layout.
     $primaryArea.Margin = [System.Windows.Thickness]::new(0,5,0,0)
     $dragArea.Height = [double]::NaN
@@ -1175,7 +1177,7 @@ function Update-ResetLabels {
         }
         # Equal star rows must both fit the taller reset block before adding bars or header controls.
         $resetHeight = [Math]::Ceiling([Math]::Max($primaryReset.DesiredSize.Height, $secondaryReset.DesiredSize.Height))
-        $creditHeight = if ($script:CreditsVisible) { 32 } else { 0 }
+        $creditHeight = if ($script:CreditsVisible -or $script:ReserveCreditRow) { 32 } else { 0 }
         if (2 * (27 + 5 + $resetHeight) + $creditHeight + 14 -le $window.ActualHeight) { break }
     }
 }
