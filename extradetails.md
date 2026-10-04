@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.2.1.
+This guide covers Codex Usage Widget 2.2.2.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 

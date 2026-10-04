@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.2.1'
+$script:WidgetVersion = '2.2.2'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -1556,7 +1556,14 @@ $window.Add_StateChanged({
     }
 })
 $trayIcon.Add_DoubleClick({ Show-Widget })
-$trayOpenItem.Add_Click({ Show-Widget })
+$trayOpenItem.Add_Click({
+    # Opening Codex selects its enabled account for both the picker and the tray meters.
+    if ($script:LocalEnabled) { $script:SelectedAccount = 'Local' }
+    elseif ($script:SharedEnabled -and $script:ReadUsageEnabled) { $script:SelectedAccount = 'Remote' }
+    Update-Display
+    Update-TrayIcon
+    Show-Widget
+})
 $trayRefreshItem.Add_Click({ Invoke-WidgetRefresh })
 # Apply settings through one native dialog instead of several competing menus.
 $settingsItem.Add_Click({ Show-WidgetSettings })

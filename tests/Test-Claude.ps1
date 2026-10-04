@@ -50,6 +50,14 @@ try {
         $actualY=$script:AccountCards[$key].Bindings.secondaryArea.TranslatePoint([Windows.Point]::new(0,0),$window).Y
         if ([Math]::Abs($actualY-$expectedY) -gt 1) { throw ("Weekly rows misaligned for " + $key + ": " + $actualY + " vs " + $expectedY) }
     }
+    # Use the real tray menu handler to switch back from Claude, including shared-only Codex.
+    Show-ClaudeWidget
+    if ($script:SelectedAccount -ne 'Claude' -or $trayIcon.Text -notlike '*Claude*') { throw 'Opening Claude did not select its tray meters.' }
+    $trayOpenItem.PerformClick()
+    if ($script:SelectedAccount -ne 'Local' -or $trayIcon.Text -notlike ('*'+$script:LocalDisplayName+'*')) { throw 'Opening Codex did not restore its tray meters.' }
+    $script:LocalEnabled=$false;Show-ClaudeWidget;$trayOpenItem.PerformClick()
+    if ($script:SelectedAccount -ne 'Remote' -or $trayIcon.Text -notlike ('*'+$script:RemoteDisplayName+'*')) { throw 'Opening Codex did not select the enabled shared account.' }
+    $script:LocalEnabled=$true
     # Disabling credits releases the blank row instead of retaining stale reservations.
     $script:CreditDisplayMode='Off';$script:SharedCreditDisplayMode='Off';Update-Display;$window.UpdateLayout()
     if ($script:AccountCards.Claude.Visual.Child.RowDefinitions[3].MinHeight -ne 0) { throw 'Hidden credits retained reserved space.' }

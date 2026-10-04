@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.2.2 — October 4, 2026
+
+- Restore Codex tray meters when choosing Open Codex Usage after opening Claude. Select shared Codex when local Codex is disabled.
+- Add regression checks using the actual tray menu click handler.
+
 ## 2.2.1 — October 4, 2026
 
 - Preserve Claude reset timestamp timezones after JSON parsing, fixing early weekly times and premature “Resetting now” countdowns.
