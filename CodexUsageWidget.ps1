@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.1.6'
+$script:WidgetVersion = '2.2.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -130,7 +130,7 @@ foreach ($key in @($script:AlertStates.Keys)) {
 # Show positive or unlimited credits by default, regardless of subscription usage.
 $script:CreditDisplayMode = 'Available'
 # Load the v2 sharing, account rendering, and unified native settings helpers.
-foreach ($helper in @('WidgetSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1')) {
+foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1')) {
     . (Join-Path $script:WidgetDirectory $helper)
 }
 
@@ -473,6 +473,11 @@ $traySharedItem = [Windows.Forms.ToolStripMenuItem]::new('Open Shared computer')
 $traySharedItem.Visible = $false
 [void]$trayMenu.Items.Add($traySharedItem)
 $traySharedItem.Add_Click({ Show-SharedWidget })
+# Reopen either Claude account without restoring unrelated detached windows.
+$claudeOpenItem=$trayMenu.Items.Add('Open Claude')
+$claudeOpenItem.Add_Click({Show-ClaudeWidget})
+$sharedClaudeOpenItem=$trayMenu.Items.Add('Open Shared Claude')
+$sharedClaudeOpenItem.Add_Click({Show-SharedClaudeWidget})
 $sharedSizeMenu = [Windows.Forms.ToolStripMenuItem]::new('Shared window size')
 $sharedSizeMenu.Visible = $false
 [void]$trayMenu.Items.Add($sharedSizeMenu)
@@ -523,6 +528,10 @@ $trayMenu.Add_Opening({
     $traySharedItem.Visible = [bool]$script:SeparateWindowsActive
     $sharedSizeMenu.Visible = [bool]$script:SeparateWindowsActive
     $traySharedItem.Text = 'Open ' + $script:RemoteDisplayName
+    $claudeOpenItem.Visible=[bool]$script:ClaudeOptions.Enabled
+    $claudeOpenItem.Text='Open '+$script:ClaudeOptions.Name
+    $sharedClaudeOpenItem.Visible=$script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled
+    $sharedClaudeOpenItem.Text='Open '+$script:SharedClaudeOptions.Name
     $trayOpenItem.Text = if ($script:SeparateWindowsActive) { 'Open ' + $script:LocalDisplayName } else { 'Open Codex Usage' }
 })
 $trayExitItem = $trayMenu.Items.Add('Exit')
@@ -542,6 +551,12 @@ $windowIcon.Freeze()
 $window.Icon = $windowIcon
 
 function Show-Widget {
+    # A tray restore should open an enabled account or Settings, never an empty disabled host.
+    if ($script:AutomaticallyHiddenHost) {
+        if ($script:ClaudeWindowActive) {Show-ClaudeWidget;return}
+        if ($script:SharedClaudeWindowActive) {Show-SharedClaudeWidget;return}
+        Show-WidgetSettings;return
+    }
     $window.Show()
     $window.WindowState = [System.Windows.WindowState]::Normal
     # Restore the desktop widget while retaining its tray-only taskbar presence.
@@ -697,7 +712,8 @@ function Show-UsageWarnings {
     if ($messages.Count -gt 0) {
         # Save the sent state before showing the notification so restarts cannot repeat it.
         Save-WarningState
-        $title = if ($resetMessage -and $hasLowWarning) { 'Codex usage update' } elseif ($resetMessage) { '5-hour window reset' } else { 'Codex usage running low' }
+        $provider=if ($script:ProcessingClaudeWarnings -or $script:UsageProvider -eq 'Claude') {'Claude'} else {'Codex'}
+        $title = if ($resetMessage -and $hasLowWarning) { $provider+' usage update' } elseif ($resetMessage) { '5-hour window reset' } else { $provider+' usage running low' }
         $icon = if ($hasLowWarning) { [System.Windows.Forms.ToolTipIcon]::Warning } else { [System.Windows.Forms.ToolTipIcon]::Info }
         # Identify imported-account alerts without changing the local tray readings.
         if ($AccountName) { $title = $AccountName + ' - ' + $title }
@@ -710,6 +726,8 @@ function Show-UsageWarnings {
 }
 
 function Save-WarningState {
+    # Claude keeps its notification cycle independent of both Codex accounts.
+    if ($script:ProcessingClaudeWarnings) { Save-ClaudeWarnings; return }
     # Shared alerts persist their own source-aware history before a popup is displayed.
     if ($script:ProcessingSharedWarnings) { Save-SharedWarnings; return }
     # Store only changes to keep polling from producing needless disk writes.
@@ -756,6 +774,10 @@ function Save-WidgetState {
         height = $window.Height
         topmost = $window.Topmost
         refreshIntervalMinutes = $script:RefreshIntervalMinutes
+        # Store account enable switches and Claude options locally, never in shared usage JSON.
+        localEnabled = $script:LocalEnabled
+        claude = $script:ClaudeOptions
+        sharedClaude = $script:SharedClaudeOptions
         primaryColor = $script:PrimaryColor
         secondaryColor = $script:SecondaryColor
         creditColor = $script:CreditColor
@@ -997,6 +1019,32 @@ function Update-ResponsiveLayout {
 }
 
 function Update-TrayIcon {
+    # Let the selected enabled account supply tray values, including when local Codex is off.
+    $keys=@(Get-EnabledAccounts)
+    $key=if ($script:SelectedAccount -in $keys) {$script:SelectedAccount} elseif ($keys.Count) {$keys[0]} else {''}
+    $original=@{Usage=$script:Usage;PrimaryColor=$script:PrimaryColor;SecondaryColor=$script:SecondaryColor;CreditColor=$script:CreditColor;CreditDisplayMode=$script:CreditDisplayMode;RefreshError=$script:RefreshError;TrayAccountName=$script:TrayAccountName}
+    try {
+        switch ($key) {
+            Local {$snapshot=$script:Usage;$scheme=$script:LocalScheme;$mode=$script:CreditDisplayMode;$failure=$script:RefreshError}
+            Remote {$snapshot=$script:RemoteUsage;$scheme=$script:RemoteScheme;$mode=$script:SharedCreditDisplayMode;$failure=$script:ReadError}
+            Claude {$snapshot=$script:ClaudeUsage;$scheme=$script:ClaudeOptions.Scheme;$mode='Off';$failure=if ($script:ClaudeStatus -like 'Subscription*') {$null} else {$script:ClaudeStatus}}
+            SharedClaude {$snapshot=$script:SharedClaudeUsage;$scheme=$script:SharedClaudeOptions.Scheme;$mode='Off';$failure=$script:ClaudeFileState.ReadError}
+            default {$snapshot=$null;$scheme=$script:LocalScheme;$mode='Off';$failure=$null}
+        }
+        $script:Usage=$snapshot;$script:CreditDisplayMode=$mode;$script:RefreshError=$failure
+        $colors=$script:ColorSchemes[$scheme]
+        $script:PrimaryColor=$colors[0];$script:SecondaryColor=$colors[1];$script:CreditColor=$colors[2]
+        $script:TrayAccountName=if ($key) {Get-AccountName $key} else {'No accounts enabled'}
+        # Skip GDI icon allocation when only a countdown or file-check timestamp changed.
+        $renderKey=@($key,$script:TrayAccountName,$scheme,$mode,$failure,(Get-SharedUsageKey $snapshot)) | ConvertTo-Json -Compress
+        if ($renderKey -ne $script:LastTrayRenderKey) {Update-SelectedTrayIcon;$script:LastTrayRenderKey=$renderKey}
+    } finally {
+        # Restore the local data and palette before the next account render or service callback.
+        foreach ($name in $original.Keys) {Set-Variable -Scope Script -Name $name -Value $original[$name]}
+    }
+}
+
+function Update-SelectedTrayIcon {
     # Convert consumed quota to usage left, keeping missing-window bars empty.
     $primaryKnown = $null -ne $script:Usage.primary.usedPercent
     $secondaryKnown = $null -ne $script:Usage.secondary.usedPercent
@@ -1016,7 +1064,7 @@ function Update-TrayIcon {
     # Include available credits while respecting the same display setting as the widget.
     $creditLabel = Get-CreditLabel
     $showCreditText = $script:CreditDisplayMode -ne 'Off' -and $creditLabel -notmatch 'unavailable|none|^Credits: 0$'
-    $tooltip = "Codex · 5h $primaryLabel · Wk $secondaryLabel" + $(if ($showCreditText) { ' · ' + $creditLabel } else { '' })
+    $tooltip = "$script:TrayAccountName · 5h $primaryLabel · Wk $secondaryLabel" + $(if ($showCreditText) { ' · ' + $creditLabel } else { '' })
     if ($script:RefreshError) { $tooltip = 'Stale · ' + $tooltip }
     $trayIcon.Text = $tooltip.Substring(0,[Math]::Min(127,$tooltip.Length))
 }
@@ -1165,7 +1213,7 @@ function Update-Display {
     }
     else {
         # Preserve the unavailable state instead of implying full quota.
-        $primaryPercent.Text = 'Unavailable'
+        $primaryPercent.Text = '—'
         $primaryBar.Value = 0
         $primaryReset.Text = 'No 5-hour window returned'
     }
@@ -1181,7 +1229,7 @@ function Update-Display {
     }
     else {
         # Preserve the unavailable state instead of implying full quota.
-        $secondaryPercent.Text = 'Unavailable'
+        $secondaryPercent.Text = '—'
         $secondaryBar.Value = 0
         $secondaryReset.Text = 'No weekly window returned'
     }
@@ -1206,6 +1254,8 @@ function Update-Display {
 }
 
 function Update-RefreshStatus {
+    # A disabled local reader cannot mark the common host stale; card statuses remain independent.
+    if (-not $script:LocalEnabled -and -not $script:RenderingAccountCard) {$outerBorder.BorderBrush='#413D4658';$outerBorder.BorderThickness=[Windows.Thickness]::new(1);$outerBorder.ToolTip=$null;return}
     # Highlight stale data without taking space away from compact numbers or hover controls.
     $outerBorder.BorderBrush = if ($script:RefreshError) { '#E8B44C' } else { '#413D4658' }
     $outerBorder.BorderThickness = [Windows.Thickness]::new($(if ($script:RefreshError) { 2 } else { 1 }))
@@ -1239,6 +1289,8 @@ function Get-CreditLabel {
 function Start-UsageRefresh {
     # A matched input check follows each widget refresh, including manual-only operation.
     if ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -eq -1) { Read-SharedUsage }
+    # Continue imported readings even when this computer's Codex account is disabled.
+    if (-not $script:LocalEnabled) { return }
     # Let the poller collect or time out the current request before starting another one.
     if ($script:RefreshProcess) { return }
 
@@ -1305,6 +1357,8 @@ function Complete-UsageRefresh {
         $result = $output | ConvertFrom-Json
         if ($result.error) { throw [string] $result.error }
 
+        # Discard a reading completed after the local account was disabled in Settings.
+        if (-not $script:LocalEnabled) { return }
         $script:Usage = $result
         # Clear stale styling only after a new successful response has been received.
         $script:RefreshError = $null
@@ -1343,6 +1397,9 @@ function Complete-UsageRefresh {
 if (Test-Path -LiteralPath $script:StatePath) {
     try {
         $state = Get-Content -LiteralPath $script:StatePath -Raw | ConvertFrom-Json
+        # Older saved states retain local Codex and leave the new Claude connection disabled.
+        Restore-ClaudeSettings $state
+        Restore-SharedClaudeSettings $state
         # Restore valid saved colors; older settings files keep the defaults.
         if ($state.primaryColor -match '^#[0-9A-Fa-f]{6}$') { $script:PrimaryColor = $state.primaryColor }
         if ($state.secondaryColor -match '^#[0-9A-Fa-f]{6}$') { $script:SecondaryColor = $state.secondaryColor }
@@ -1395,7 +1452,7 @@ if (Test-Path -LiteralPath $script:StatePath) {
         $script:SeparateRemoteBounds = $state.separateRemoteBounds
         $script:CombinedWindowBounds = $state.combinedWindowBounds
         $script:RestoredSeparateLayout = $script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Separate windows'
-        if ($state.selectedAccount -in @('Local','Remote')) { $script:SelectedAccount = $state.selectedAccount }
+        if ($state.selectedAccount -in @('Local','Remote','Claude','SharedClaude')) { $script:SelectedAccount = $state.selectedAccount }
         # Preserve palette selections saved before the Fuchsia label was shortened.
         foreach ($key in @('localScheme','remoteScheme')) {
             if ($state.$key -eq 'Muted fuchsia / mauve / mist') { $state.$key = 'Fuchsia / mauve / mist' }
@@ -1521,10 +1578,17 @@ $window.Add_SourceInitialized({
 })
 $window.Add_Closing({
     # In Separate windows, the close button hides just the local account to the shared tray.
-    if ($script:SeparateWindowsActive -and -not $script:ExitRequested) { $_.Cancel=$true; Save-WidgetState; $window.Hide(); return }
+    if (($script:SeparateWindowsActive -or $script:ClaudeWindowActive -or $script:SharedClaudeWindowActive) -and -not $script:ExitRequested) { $_.Cancel=$true; Save-WidgetState; $window.Hide(); return }
     $script:ExitRequested = $true
     if ($script:SettingsForm) { $script:SettingsForm.Close() }
     if ($script:SeparateView) { Save-SeparateWindowBounds; $script:SeparateView.Window.Close() }
+    # Close every optional Claude window and its browser before ending the shared process.
+    if ($script:ClaudeView) { Save-ClaudeWindowBounds; $script:ClaudeView.Window.Close() }
+    if ($script:SharedClaudeView) {Save-SharedClaudeWindowBounds; $script:SharedClaudeView.Window.Close()}
+    if ($script:ClaudeSharingTimer) {$script:ClaudeSharingTimer.Stop()}
+    if ($script:ClaudeTimer) { $script:ClaudeTimer.Stop() }
+    if ($script:ClaudeBrowserWindow) { $script:ClaudeBrowserWindow.Close(); $script:ClaudeBrowser.Dispose() }
+    if ($script:ClaudeSetupProcess -and -not $script:ClaudeSetupProcess.HasExited) { $script:ClaudeSetupProcess.Kill($true) }
     # Use the same settings writer as preset sizes and refresh interval changes.
     Save-WidgetState
     # Stop file polling before disposing the window and tray controls.
@@ -1572,6 +1636,8 @@ $window.Add_ContentRendered({
 
     Update-ResponsiveLayout
     Read-SharedUsage
+    Update-ClaudeConnection
+    Update-ClaudeSharingTimer
     Start-UsageRefresh
 })
 # End the event loop only on explicit close; hiding to the tray must keep timers and menus alive.

@@ -2,6 +2,14 @@
 
 [Back to README](README.md)
 
+## 2.2.0 — October 4, 2026
+
+- Add optional Claude subscription usage through a dedicated signed-in WebView2 Usage window, independent refresh/reset settings, palettes and notifications. Keep unknown quotas unknown and handle expired sessions, timeouts and rate limits.
+- Add independent Local Codex, Shared Codex, Local Claude and Shared Claude switches. Disabled accounts stop displaying and polling; local publishers also stop.
+- Extend common layouts and the account picker to four sources; remember independent attached/separate Claude window geometry and reopen each from the tray.
+- Add Claude JSON sharing with separate files and alert history, provider validation, change-only exports and 30-minute automatic check-ins. Shared imports remain independent of a disabled local Claude account.
+- Add isolated regression checks for Claude conversion, four-account layouts, disabled responses and Claude file sharing.
+
 ## 2.1.6 — October 1, 2026
 
 - Show unknown credit balances as “—” in labeled rows, with the full explanation on hover. Long unavailable-balance messages no longer force the shared account into numbers-only mode when its quota labels fit.

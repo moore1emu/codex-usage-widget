@@ -26,6 +26,11 @@ Invoke-Expression $source
 function Start-UsageRefresh { }
 function Read-SharedUsage { }
 function Write-SharedUsage { }
+# Fixture windows must not initialize WebView2, query Claude, or start imported Claude file timers.
+function Update-ClaudeConnection { }
+function Update-ClaudeSharingTimer { }
+function Start-ClaudeConnection { }
+function Start-ClaudeRefresh { }
 # Supply clearly artificial account readings so no login or credentials are needed.
 $now = [DateTimeOffset]::Now.ToUnixTimeSeconds()
 $script:Usage = @{ fetchedAt=$now;planType='plus';primary=@{usedPercent=27;resetsAt=$now+7000};secondary=@{usedPercent=55;resetsAt=$now+400000};credits=@{balance='838';hasCredits=$true} }

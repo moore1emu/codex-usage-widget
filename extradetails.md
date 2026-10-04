@@ -2,15 +2,15 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers Codex Usage Widget 2.1.6.
+This guide covers Codex Usage Widget 2.2.0.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
 ## Requirements
 
 - **Windows with PowerShell 7 installed on each computer.** Built-in Windows PowerShell 5.1 alone is not sufficient; this version does not provide a 5.1 fallback.
-- **Codex installed and signed in locally**, with its native `codex.exe` available to the usage reader.
-- Keep all widget files together, including `WidgetSharing.ps1`, `WidgetAccounts.ps1`, and `WidgetSettings.ps1`, and let OneDrive finish syncing before launching on another computer. Syncing the widget folder does not install PowerShell 7 or Codex.
+- **Codex installed and signed in locally** only if local Codex is enabled, with its native `codex.exe` available to the usage reader. Shared accounts and Claude do not require a local Codex sign-in.
+- Keep all widget files together, including all `Widget*.ps1` helpers and `Setup-ClaudeWebView.ps1`, and let OneDrive finish syncing before launching on another computer. Syncing the widget folder does not install PowerShell 7 or Codex.
 
 ## Run it
 
@@ -151,3 +151,21 @@ Hidden startup failures show a popup and, when writable, save diagnostic details
 Publish only this `CodexUsageWidget` folder. The supplied scripts and icon contain no hardcoded personal names, computer paths, account identifiers, or credentials. Optional exports whitelist quota windows, reset timestamps, plan type, credit balance, freshness metadata, your chosen nickname, and a generated random source identifier. Anyone with access to those files can read that usage information; keep them private. Executable locations, Windows user identity, and local folders are resolved on the computer running the widget. The reader requests quota data through the local Codex installation and returns usage windows, plan information, and credits; it does not export sign-in credentials.
 
 Settings, notification state, and startup-error diagnostics are stored in `%LOCALAPPDATA%\CodexUsageWidget`, outside this project. Shared notification history uses `shared-warning-state.json`; it is separate from local warnings. Generated desktop and Startup shortcuts contain local paths. The included `.gitignore` excludes shortcuts, logs, local state, credential files, and common scratch folders. Do not copy Codex authentication files, caches, raw usage responses, or diagnostics into a public repository. Review any additional files before sharing them; error logs can include local paths.
+
+## Claude subscriptions
+
+Enable **Claude** in its Settings tab, click **Apply**, then **Connect / open Claude Usage**. Sign in manually on Claude’s own website. This is a separate browser session; an existing desktop-app sign-in is not copied. Closing the connection window hides it while subscription refreshes continue. You can reopen it to change the active subscription or sign in again.
+
+The optional connection requires the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). First use downloads a pinned Microsoft WebView2 SDK from NuGet and verifies Microsoft’s assembly signatures. SDK files, Microsoft’s license, and the private browser profile are stored under the widget’s LocalAppData directory, outside this repository and synced folders. Do not share that browser profile.
+
+The connector reads Claude.ai’s undocumented subscription usage endpoint inside the authenticated browser. It does not copy session cookies, reuse Claude Code credentials, or require a developer API key. The endpoint may change. Authentication failures, network errors and rate limits retain the last reading with an explicit status. Rate limits pause requests for at least 15 minutes. Missing limits appear as **—**, including plans that do not expose a meter. Claude extra-usage spending is not displayed as Codex credits. Model-specific limits and developer API billing are not included in this release.
+
+Choose an independent refresh interval and palette, reset details, warning thresholds and reset notifications. Claude can follow the General account layout, remain attached, or use a separate window with remembered size and position. General’s layout supports all enabled accounts, including four columns or four stacked cards. Tray entries reopen detached Claude windows individually. Exit and shortcut restart close the browser and all account windows together.
+
+## Sharing Claude between computers
+
+In **Shared Claude**, enable the master switch and choose separate Claude output and input JSON files outside the public project. Each computer writes its own local Claude reading and reads the other computer’s file. Do not reuse Codex JSON files: snapshots carry a provider label and incorrect provider files are rejected. Both computers should use version 2.2.0 or later.
+
+Write and read switches and intervals are independent. Matching reads follow the local Claude refresh interval even if local Claude is disabled; manual-only stays manual. Local Claude must be enabled and freshly connected to publish new readings. Exports change only when usage or account metadata changes, with automatic 30-minute check-ins. Shared Claude has its own colors, reset display, notifications, placement, window size and position. Its name comes from the imported file. Failed or stale imports keep the last known reading and cannot trigger fresh-usage alerts.
+
+To show only **shared Codex and local Claude**, turn off **Enable local Codex account** in General, enable Shared’s Codex reader, and enable Claude. Disabled sources stop their panels, service polling and alerts while preserving their saved settings. Disabling local Codex also stops its JSON publisher. All sources can be disabled while Settings remains accessible through the tray.

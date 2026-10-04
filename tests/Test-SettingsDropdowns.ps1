@@ -7,7 +7,11 @@ $settings=[IO.File]::ReadAllText((Join-Path $script:TestProject 'WidgetSettings.
 $settings=$settings.Replace('[Windows.Threading.Dispatcher]::PushFrame($settingsFrame)',@'
 $dropdownTimer=[Windows.Forms.Timer]::new()
 $dropdownTimer.Interval=1400
-$script:DropdownChoices=@('Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account')
+# Unlock draft-only Claude choices without enabling a live connection or applying settings.
+$controls.ClaudeEnabled.Checked=$true;$controls.ClaudePlacement.SelectedItem='Separate window'
+$controls.SharedClaudeEnabled.Checked=$true;$controls.SharedClaudeReadEnabled.Checked=$true;$controls.SharedClaudeWriteEnabled.Checked=$true
+$controls.SharedClaudePlacement.SelectedItem='Separate window'
+$script:DropdownChoices=@('Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval')
 $script:DropdownIndex=0
 $script:OpenDropdownKey=$null
 $dropdownTimer.Add_Tick({
@@ -37,7 +41,12 @@ $dropdownTimer.Add_Tick({
         $key=$script:DropdownChoices[$script:DropdownIndex++]
         $choice=$controls[$key]
         $tabs.SelectedTab=$choice.Parent.Parent
+        # Complete tab scrolling before opening the native popup; hidden rows otherwise close it later.
+        $choice.Parent.Parent.ScrollControlIntoView($choice)
+        $dialog.PerformLayout()
+        [Windows.Forms.Application]::DoEvents()
         [void]$choice.Focus()
+        [Windows.Forms.Application]::DoEvents()
         $script:DropdownSelection=$choice.SelectedIndex
         $choice.DroppedDown=$true
         & $updateStatus

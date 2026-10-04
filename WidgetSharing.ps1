@@ -122,6 +122,8 @@ function Get-SharedUsageKey {
 
 function Write-SharedUsage {
     param([switch] $Force)
+    # Turning off local Codex also stops publishing an increasingly stale local reading.
+    if ($script:LocalEnabled -eq $false) { return }
     # A file timer may publish the latest reading, but must never change its original age.
     if (-not $script:SharedEnabled -or -not $script:WriteUsageEnabled -or -not $script:Usage -or $script:RefreshError) { return }
     $temporary = $null
@@ -158,7 +160,7 @@ function Write-SharedUsage {
         if (-not [IO.Directory]::Exists($directory)) { throw 'The output folder is unavailable.' }
         # Metadata updates publish immediately but do not mislabel unchanged quota as a usage change.
         $changedAt = if ($usageKey -ne $script:PublishedUsageKey -or $script:UsageChangedAt -le 0 -or -not [IO.File]::Exists($target)) { $snapshot.fetchedAt } else { $script:UsageChangedAt }
-        $payload = @{ schemaVersion=1; sourceId=$script:SharingSourceId; displayName=$script:LocalDisplayName; refreshIntervalMinutes=$script:RefreshIntervalMinutes; checkInMinutes=30; usageChangedAt=$changedAt; writtenAt=$now.ToUnixTimeSeconds(); usage=$snapshot }
+        $payload = @{ schemaVersion=1; provider=$(if ($script:UsageProvider) {$script:UsageProvider} else {'Codex'}); sourceId=$script:SharingSourceId; displayName=$script:LocalDisplayName; refreshIntervalMinutes=$script:RefreshIntervalMinutes; checkInMinutes=30; usageChangedAt=$changedAt; writtenAt=$now.ToUnixTimeSeconds(); usage=$snapshot }
         # Write beside the destination and replace it atomically to avoid partial reads during sync.
         $temporary = Join-Path $directory ('.codex-usage-' + [guid]::NewGuid().ToString('N') + '.tmp')
         [IO.File]::WriteAllText($temporary, ($payload | ConvertTo-Json -Depth 7 -Compress), [Text.UTF8Encoding]::new($false))
@@ -197,6 +199,10 @@ function Read-SharedUsage {
         if ($text.Length -gt 65536) { throw 'The input file is too large to be a usage snapshot.' }
         $incoming = $text | ConvertFrom-Json
         if ($incoming.schemaVersion -ne 1 -or $incoming.sourceId -notmatch '^[0-9a-f]{32}$' -or -not $incoming.usage) { throw 'This is not a supported usage snapshot.' }
+        # Prevent a Claude export from being displayed under a Codex account, or vice versa.
+        $provider=if ($incoming.provider) {[string]$incoming.provider} else {'Codex'}
+        $expected=if ($script:UsageProvider) {$script:UsageProvider} else {'Codex'}
+        if ($provider -ne $expected) {throw "This is a $provider snapshot; choose a $expected usage file."}
         if ($incoming.sourceId -eq $script:SharingSourceId) { throw 'This file belongs to this computer; select the shared computer''s file.' }
         $snapshot = ConvertTo-SharedUsage $incoming.usage
         # Keep the last valid reading if an older OneDrive copy temporarily replaces the file.
@@ -256,11 +262,14 @@ function Invoke-SharingTick {
     if ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0 -and $now -ge $script:NextReadAt) {
         Read-SharedUsage
         $script:NextReadAt = $now.AddMinutes($script:ReadIntervalMinutes)
-        if ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible)) { Update-Display }
+        if (-not $script:SuppressSharingDisplay -and ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible))) { Update-Display }
     }
 }
 
 function Invoke-WidgetRefresh {
+    Invoke-ClaudeSharing -Force
+    # Claude and shared-file refreshes remain available when local Codex is disabled.
+    Start-ClaudeRefresh -Force
     # Manual refresh checks the other file immediately and publishes the next fresh local reading.
     Read-SharedUsage
     $script:PublishOnRefresh = $true

@@ -137,7 +137,7 @@ function Show-WidgetSettings {
     $tabs = [Windows.Forms.TabControl]::new()
     $tabs.Dock = 'Fill'
     $tables = @{}
-    foreach ($name in @('General','Shared')) {
+    foreach ($name in @('General','Shared','Claude','Shared Claude')) {
         # Scroll a tab only when Windows text scaling makes its controls exceed the available height.
         $page = [Windows.Forms.TabPage]::new($name)
         $page.AutoScroll = $true
@@ -155,6 +155,12 @@ function Show-WidgetSettings {
         $tables[$name] = $table
     }
     $controls = @{}
+    # Local Codex can be disabled while the shared account and Claude keep running.
+    $controls.LocalEnabled=[Windows.Forms.CheckBox]::new()
+    $controls.LocalEnabled.Text='Enable local Codex account'
+    $controls.LocalEnabled.AutoSize=$true
+    $controls.LocalEnabled.Checked=$script:LocalEnabled
+    Add-SettingsRow $tables.General '' $controls.LocalEnabled
     $intervalChoices = @('Match widget refresh','Every 1 minute','Every 5 minutes','Every 15 minutes','Every 30 minutes','Manual only')
     $intervalValues = @(-1,1,5,15,30,0)
     $widgetChoices = @('Every 1 minute','Every 5 minutes','Every 15 minutes','Every 30 minutes','Manual only')
@@ -182,11 +188,11 @@ function Show-WidgetSettings {
     $controls.SharedLock = Add-SettingsNote $tables.Shared ''
     # Keep second-account layout and palette controls beside their shared-file connections.
     $controls.Layout = New-SettingsChoice @('Side by side','Stacked','Account picker','Separate windows') $script:AccountLayout
-    Add-SettingsRow $tables.Shared 'Account layout' $controls.Layout
+    Add-SettingsRow $tables.General 'Account layout' $controls.Layout
     # Keep the choice tied to its account index even when both accounts have the same nickname.
-    $controls.Account = New-SettingsChoice @($script:LocalDisplayName,$script:RemoteDisplayName) $script:LocalDisplayName
-    $controls.Account.SelectedIndex = if ($script:SelectedAccount -eq 'Remote') { 1 } else { 0 }
-    Add-SettingsRow $tables.Shared 'Picker account' $controls.Account
+    $controls.Account = New-SettingsChoice @($script:LocalDisplayName,$script:RemoteDisplayName,$script:ClaudeOptions.Name,$script:SharedClaudeOptions.Name) (Get-AccountName $script:SelectedAccount)
+    $controls.Account.SelectedIndex = @('Local','Remote','Claude','SharedClaude').IndexOf($script:SelectedAccount)
+    Add-SettingsRow $tables.General 'Picker account' $controls.Account
     $controls.LocalScheme = New-SettingsChoice @($script:ColorSchemes.Keys) $script:LocalScheme
     $controls.RemoteScheme = New-SettingsChoice @($script:ColorSchemes.Keys) $script:RemoteScheme
     Add-SettingsRow $tables.General 'This computer''s colors' $controls.LocalScheme
@@ -276,6 +282,95 @@ function Show-WidgetSettings {
     $controls.ResetAlert.AutoSize = $true
     $controls.ResetAlert.Checked = $script:NotifyPrimaryReset
     Add-SettingsRow $tables.General '' $controls.ResetAlert
+    # Claude has the same account controls, with a subscription connection rather than shared JSON.
+    $controls.ClaudeEnabled=[Windows.Forms.CheckBox]::new()
+    $controls.ClaudeEnabled.Text='Enable Claude subscription'
+    $controls.ClaudeEnabled.AutoSize=$true
+    $controls.ClaudeEnabled.Checked=$script:ClaudeOptions.Enabled
+    Add-SettingsRow $tables.Claude '' $controls.ClaudeEnabled
+    $controls.ClaudeName=[Windows.Forms.TextBox]::new()
+    $controls.ClaudeName.MaxLength=40; $controls.ClaudeName.Text=$script:ClaudeOptions.Name
+    Add-SettingsRow $tables.Claude 'Display name' $controls.ClaudeName
+    $controls.ClaudePlacement=New-SettingsChoice @('Follow layout','Attached','Separate window') $script:ClaudeOptions.Placement
+    Add-SettingsRow $tables.Claude 'Window placement' $controls.ClaudePlacement
+    $controls.ClaudeSize=New-SettingsChoice @('Keep current size','Mini','Small','Medium','Large / Default') 'Keep current size'
+    Add-SettingsRow $tables.Claude 'Separate window size' $controls.ClaudeSize
+    $controls.ClaudeScheme=New-SettingsChoice @($script:ColorSchemes.Keys) $script:ClaudeOptions.Scheme
+    Add-SettingsRow $tables.Claude 'Colors' $controls.ClaudeScheme
+    $controls.ClaudeInterval=New-SettingsChoice $widgetChoices $widgetChoices[@(1,5,15,30,0).IndexOf($script:ClaudeOptions.Interval)]
+    Add-SettingsRow $tables.Claude 'Subscription refresh' $controls.ClaudeInterval
+    foreach ($entry in @(@{Key='ResetHours';Label='5-hour times: hours ahead';Max=168},@{Key='PrimaryAlert';Label='5-hour warning below %';Max=100},@{Key='SecondaryAlert';Label='Weekly warning below %';Max=100})) {
+        # Bound each numeric choice; zero turns the schedule or corresponding warning off.
+        $numeric=[Windows.Forms.NumericUpDown]::new(); $numeric.Maximum=$entry.Max; $numeric.Value=$script:ClaudeOptions[$entry.Key]
+        $controls['Claude'+$entry.Key]=$numeric
+        Add-SettingsRow $tables.Claude $entry.Label $numeric
+    }
+    foreach ($entry in @(@{Key='WeeklyDate';Label='Show weekly reset date and time'},@{Key='ResetAlert';Label='Notify when the 5-hour window resets'})) {
+        $check=[Windows.Forms.CheckBox]::new(); $check.Text=$entry.Label; $check.AutoSize=$true; $check.Checked=$script:ClaudeOptions[$entry.Key]
+        $controls['Claude'+$entry.Key]=$check
+        Add-SettingsRow $tables.Claude '' $check
+    }
+    $controls.ClaudeConnect=[Windows.Forms.Button]::new()
+    $controls.ClaudeConnect.Text='Connect / open Claude Usage'
+    $controls.ClaudeConnect.Add_Click({Start-ClaudeConnection -Show})
+    Add-SettingsRow $tables.Claude '' $controls.ClaudeConnect
+    $controls.ClaudeStatus=Add-SettingsNote $tables.Claude $script:ClaudeStatus
+    Set-SettingsHelp $settingsToolTip $controls.ClaudeConnect 'Enable Claude and Apply first. Sign in on Claude''s own Usage page. The private browser profile stays on this computer. No copied tokens or developer API key are needed. The first connection downloads signed Microsoft WebView2 SDK files; the Edge WebView2 Runtime must be installed.'
+    Set-SettingsHelp $settingsToolTip $controls.ClaudeEnabled 'Turning Claude off hides its panel and separate window and stops subscription polling and notifications. Your settings and sign-in profile are preserved.'
+    Set-SettingsHelp $settingsToolTip $controls.ClaudePlacement 'Follow layout uses General''s account layout. Attached keeps Claude in the main window. Separate window remembers its own size and position.'
+    Set-SettingsHelp $settingsToolTip $controls.ClaudeResetHours '0 = off. Later reset times are estimates assuming immediate reuse.'
+    Set-SettingsHelp $settingsToolTip $controls.ClaudeResetAlert 'A reset notification requires known weekly quota above 0%.'
+    foreach ($key in @('ClaudePrimaryAlert','ClaudeSecondaryAlert')) {Set-SettingsHelp $settingsToolTip $controls[$key] '0 = off. Warnings appear once per threshold crossing, only after successful refreshes.'}
+    Set-SettingsHelp $settingsToolTip $controls.LocalEnabled 'Turning off local Codex hides its panel and stops local refreshes, notifications and JSON publishing. Shared Codex and Claude remain independent.'
+    # Shared Claude mirrors the account controls, with a subscription connection rather than shared JSON.
+    $controls.SharedClaudeEnabled=[Windows.Forms.CheckBox]::new()
+    $controls.SharedClaudeEnabled.Text='Enable Shared Claude'
+    $controls.SharedClaudeEnabled.AutoSize=$true
+    $controls.SharedClaudeEnabled.Checked=$script:SharedClaudeOptions.Enabled
+    Add-SettingsRow $tables['Shared Claude'] '' $controls.SharedClaudeEnabled
+    $controls.SharedClaudeName=[Windows.Forms.TextBox]::new()
+    $controls.SharedClaudeName.MaxLength=40; $controls.SharedClaudeName.Text=$script:SharedClaudeOptions.Name
+    Add-SettingsRow $tables['Shared Claude'] 'Display name' $controls.SharedClaudeName
+    $controls.SharedClaudePlacement=New-SettingsChoice @('Follow layout','Attached','Separate window') $script:SharedClaudeOptions.Placement
+    Add-SettingsRow $tables['Shared Claude'] 'Window placement' $controls.SharedClaudePlacement
+    $controls.SharedClaudeSize=New-SettingsChoice @('Keep current size','Mini','Small','Medium','Large / Default') 'Keep current size'
+    Add-SettingsRow $tables['Shared Claude'] 'Separate window size' $controls.SharedClaudeSize
+    $controls.SharedClaudeScheme=New-SettingsChoice @($script:ColorSchemes.Keys) $script:SharedClaudeOptions.Scheme
+    Add-SettingsRow $tables['Shared Claude'] 'Colors' $controls.SharedClaudeScheme
+    foreach ($entry in @(@{Key='ResetHours';Label='5-hour times: hours ahead';Max=168},@{Key='PrimaryAlert';Label='5-hour warning below %';Max=100},@{Key='SecondaryAlert';Label='Weekly warning below %';Max=100})) {
+        # Bound each numeric choice; zero turns the schedule or corresponding warning off.
+        $numeric=[Windows.Forms.NumericUpDown]::new(); $numeric.Maximum=$entry.Max; $numeric.Value=$script:SharedClaudeOptions[$entry.Key]
+        $controls['SharedClaude'+$entry.Key]=$numeric
+        Add-SettingsRow $tables['Shared Claude'] $entry.Label $numeric
+    }
+    foreach ($entry in @(@{Key='WeeklyDate';Label='Show weekly reset date and time'},@{Key='ResetAlert';Label='Notify when the 5-hour window resets'})) {
+        $check=[Windows.Forms.CheckBox]::new(); $check.Text=$entry.Label; $check.AutoSize=$true; $check.Checked=$script:SharedClaudeOptions[$entry.Key]
+        $controls['SharedClaude'+$entry.Key]=$check
+        Add-SettingsRow $tables['Shared Claude'] '' $check
+    }
+    # The local Claude publisher and imported Claude reader use distinct private JSON files.
+    foreach ($kind in @('Write','Read')) {
+        $check=[Windows.Forms.CheckBox]::new();$check.AutoSize=$true
+        $check.Text=if ($kind -eq 'Write') {'Write local Claude usage to JSON'} else {'Read shared Claude JSON'}
+        $check.Checked=$script:SharedClaudeOptions[$kind+'Enabled'];$controls['SharedClaude'+$kind+'Enabled']=$check
+        Add-SettingsRow $tables['Shared Claude'] '' $check
+        $path=[Windows.Forms.TextBox]::new();$path.Text=$script:SharedClaudeOptions[$(if ($kind -eq 'Write') {'OutputPath'} else {'InputPath'})]
+        $controls['SharedClaude'+$kind+'Path']=$path
+        $browse=[Windows.Forms.Button]::new();$browse.Text='Browse…';$browse.Tag=@{Kind=$kind;Input=$path}
+        $browse.Add_Click({param($sender,$eventArgs)
+            # Browse paths without reading any credentials or arbitrary selected file contents.
+            $chooser=if ($sender.Tag.Kind -eq 'Write') {[Windows.Forms.SaveFileDialog]::new()} else {[Windows.Forms.OpenFileDialog]::new()}
+            try {$chooser.Filter='Usage JSON (*.json)|*.json';$chooser.FileName=$sender.Tag.Input.Text;if ($chooser.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {$sender.Tag.Input.Text=$chooser.FileName}} finally {$chooser.Dispose()}
+        })
+        $controls['SharedClaude'+$kind+'Browse']=$browse
+        Add-SettingsRow $tables['Shared Claude'] ($kind+' file') $path $browse
+        $choice=New-SettingsChoice $intervalChoices $intervalChoices[$intervalValues.IndexOf($script:SharedClaudeOptions[$kind+'Interval'])]
+        $controls['SharedClaude'+$kind+'Interval']=$choice
+        Add-SettingsRow $tables['Shared Claude'] ($kind+' frequency') $choice
+    }
+    $controls.SharedClaudeStatus=Add-SettingsNote $tables['Shared Claude'] ''
+    Set-SettingsHelp $settingsToolTip $controls.SharedClaudeWritePath 'Choose a different private output JSON file on each computer. Claude and Codex use separate files. Writes happen only after quota changes, with an automatic 30-minute check-in.'
+    Set-SettingsHelp $settingsToolTip $controls.SharedClaudeReadPath 'Select the other computer''s Claude export. Match Claude refresh or choose a separate cadence. Imported alerts require fresh readings.'
     # Map former help paragraphs to the settings and labels they explain.
     Set-SettingsHelp $settingsToolTip $controls.Refresh 'Checks this computer''s Codex account. File timers use the latest available reading.'
     foreach ($key in @('ResetHours','SharedResetHours')) {
@@ -296,6 +391,11 @@ function Show-WidgetSettings {
     }
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
+        # Validate Claude sharing paths before applying any draft account switches.
+        $claudeOutput=if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked) {Resolve-UsageFilePath $controls.SharedClaudeWritePath.Text} else {$controls.SharedClaudeWritePath.Text.Trim()}
+        $claudeInput=if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeReadEnabled.Checked) {Resolve-UsageFilePath $controls.SharedClaudeReadPath.Text} else {$controls.SharedClaudeReadPath.Text.Trim()}
+        if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked -and $controls.SharedClaudeReadEnabled.Checked -and $claudeOutput -eq $claudeInput) {throw 'Claude input and output must be different files.'}
+        if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked -and -not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($claudeOutput))) {throw 'Choose an existing private Claude output folder.'}
         # Validate all sharing paths before changing any persistent setting.
         $output = if ($controls.SharedEnabled.Checked -and $controls.WriteEnabled.Checked) { Resolve-UsageFilePath $controls.WritePath.Text } else { $controls.WritePath.Text.Trim() }
         $inputPath = if ($controls.SharedEnabled.Checked -and $controls.ReadEnabled.Checked) { Resolve-UsageFilePath $controls.ReadPath.Text } else { $controls.ReadPath.Text.Trim() }
@@ -309,6 +409,31 @@ function Show-WidgetSettings {
         if ($script:UsageOutputPath -ne $output) { $script:PublishedTarget=''; $script:PublishedUsageKey=$null; $script:PublishedMetadataKey=$null; $script:UsageChangedAt=0; $script:LastWrittenAt = $null; $script:WriteError = $null }
         # Preserve draft connection switches and independent choices even when the master lock is off.
         $script:SharedEnabled = $controls.SharedEnabled.Checked
+        # Apply independent source switches and Claude drafts without mixing account histories.
+        # Preserve imported Claude preferences separately from the local browser connection.
+        if ($script:SharedClaudeOptions.InputPath -ne $claudeInput) {$script:ClaudeFileState.RemoteUsage=$null;$script:ClaudeFileState.ReadFileStamp='';$script:SharedClaudeUsage=$null}
+        $script:SharedClaudeOptions.Enabled=$controls.SharedClaudeEnabled.Checked
+        $script:SharedClaudeOptions.InputPath=$claudeInput;$script:SharedClaudeOptions.OutputPath=$claudeOutput
+        foreach ($kind in @('Read','Write')) {$script:SharedClaudeOptions[$kind+'Enabled']=$controls['SharedClaude'+$kind+'Enabled'].Checked;$script:SharedClaudeOptions[$kind+'Interval']=$intervalValues[$controls['SharedClaude'+$kind+'Interval'].SelectedIndex]}
+        $script:SharedClaudeOptions.Placement=[string]$controls.SharedClaudePlacement.SelectedItem
+        $script:SharedClaudeOptions.Scheme=[string]$controls.SharedClaudeScheme.SelectedItem
+        foreach ($key in @('ResetHours','PrimaryAlert','SecondaryAlert')) {$script:SharedClaudeOptions[$key]=[int]$controls['SharedClaude'+$key].Value}
+        $script:SharedClaudeOptions.WeeklyDate=$controls.SharedClaudeWeeklyDate.Checked
+        if ($script:SharedClaudeOptions.ResetAlert -ne $controls.SharedClaudeResetAlert.Checked) {$script:ClaudeFileState.SharedAlertStates.Remove('primaryReset')}
+        $script:SharedClaudeOptions.ResetAlert=$controls.SharedClaudeResetAlert.Checked
+        $script:LocalEnabled=$controls.LocalEnabled.Checked
+        $script:ClaudeOptions.Enabled=$controls.ClaudeEnabled.Checked
+        $claudeName=($controls.ClaudeName.Text -replace '[\p{C}]','').Trim()
+        $script:ClaudeOptions.Name=if ($claudeName) {$claudeName} else {'Claude'}
+        $script:ClaudeOptions.Placement=[string]$controls.ClaudePlacement.SelectedItem
+        $script:ClaudeOptions.Scheme=[string]$controls.ClaudeScheme.SelectedItem
+        $script:ClaudeOptions.Interval=@(1,5,15,30,0)[$controls.ClaudeInterval.SelectedIndex]
+        foreach ($key in @('ResetHours','PrimaryAlert','SecondaryAlert')) {$script:ClaudeOptions[$key]=[int]$controls['Claude'+$key].Value}
+        if ($script:ClaudeOptions.ResetAlert -ne $controls.ClaudeResetAlert.Checked) {$script:ClaudeAlertStates.Remove('primaryReset')}
+        $script:ClaudeOptions.ResetAlert=$controls.ClaudeResetAlert.Checked
+        $script:ClaudeOptions.WeeklyDate=$controls.ClaudeWeeklyDate.Checked
+        Update-ClaudeConnection
+        Update-ClaudeSharingTimer
         $script:SharedCreditDisplayMode = @('Available','Always','Off')[$controls.SharedCredits.SelectedIndex]
         $script:SharedPrimaryResetHours = [int]$controls.SharedResetHours.Value
         $script:SharedShowWeeklyResetDate = $controls.SharedWeeklyDate.Checked
@@ -326,8 +451,8 @@ function Show-WidgetSettings {
         $script:NextWriteAt = [DateTimeOffset]::Now
         $script:NextReadAt = [DateTimeOffset]::Now
         $script:AccountLayout = [string]$controls.Layout.SelectedItem
-        $script:SelectedAccount = if ($controls.Account.SelectedIndex -eq 1) { 'Remote' } else { 'Local' }
-        $script:AccountPicker.SelectedIndex = $controls.Account.SelectedIndex
+        $script:SelectedAccount = @('Local','Remote','Claude','SharedClaude')[$controls.Account.SelectedIndex]
+        Update-AccountNames
         Set-AccountScheme ([string]$controls.LocalScheme.SelectedItem)
         Set-AccountScheme ([string]$controls.RemoteScheme.SelectedItem) -Remote
         $script:CreditDisplayMode = @('Available','Always','Off')[$controls.Credits.SelectedIndex]
@@ -346,9 +471,12 @@ function Show-WidgetSettings {
         Read-SharedUsage
         Write-SharedUsage -Force
         Update-Display
+        if ($controls.ClaudeSize.SelectedItem -ne 'Keep current size') {Set-ClaudeWindowPreset ([string]$controls.ClaudeSize.SelectedItem)}
+        if ($controls.SharedClaudeSize.SelectedItem -ne 'Keep current size') {Set-SharedClaudeWindowPreset ([string]$controls.SharedClaudeSize.SelectedItem)}
         if ($controls.Size.SelectedItem -ne 'Keep current size') { Set-WidgetPreset ([string]$controls.Size.SelectedItem) }
         if ($controls.Position.SelectedItem -ne 'Keep current position') { Set-WidgetCorner ([string]$controls.Position.SelectedItem) }
         Save-SharedWarnings
+        Save-ClaudeWarnings
         Save-WarningState
         Save-WidgetState
     }
@@ -384,8 +512,8 @@ function Show-WidgetSettings {
         }
         # Refresh imported nicknames without changing the draft's account selection.
         $accountIndex = $controls.Account.SelectedIndex
-        $names = @($script:LocalDisplayName,$script:RemoteDisplayName)
-        for ($index = 0; $index -lt 2; $index++) {
+        $names = @($script:LocalDisplayName,$script:RemoteDisplayName,$script:ClaudeOptions.Name,$script:SharedClaudeOptions.Name)
+        for ($index = 0; $index -lt 4; $index++) {
             if ([string]$controls.Account.Items[$index] -ne $names[$index]) { $controls.Account.Items[$index] = $names[$index] }
         }
         $controls.Account.SelectedIndex = $accountIndex
@@ -405,11 +533,25 @@ function Show-WidgetSettings {
             $controls[$kind + 'Status'].Text = (Get-SharingStatus $kind) + ' | Selected: ' + $cadence
         }
         $controls.Name.Enabled = $sharedOn -and $controls.WriteEnabled.Checked
-        $controls.Account.Enabled = $sharedOn -and $controls.Layout.SelectedItem -eq 'Account picker'
+        $controls.Account.Enabled = $controls.Layout.SelectedItem -eq 'Account picker'
+        # A disabled Claude source locks its drafts while preserving every saved value.
+        foreach ($control in $tables.Claude.Controls) {$control.Enabled=$controls.ClaudeEnabled.Checked}
+        $controls.ClaudeEnabled.Enabled=$true
+        $controls.ClaudeStatus.Enabled=$true
+        $controls.ClaudeConnect.Enabled=$controls.ClaudeEnabled.Checked -and $script:ClaudeOptions.Enabled
+        $controls.ClaudeStatus.Text=if (-not $controls.ClaudeEnabled.Checked) {'Disabled'} elseif (-not $script:ClaudeOptions.Enabled) {'Apply to enable Claude, then Connect'} else {$script:ClaudeStatus}
+        $controls.ClaudeSize.Enabled=$controls.ClaudeEnabled.Checked -and ($controls.ClaudePlacement.SelectedItem -eq 'Separate window' -or ($controls.ClaudePlacement.SelectedItem -eq 'Follow layout' -and $controls.Layout.SelectedItem -eq 'Separate windows'))
+        # The imported Claude master switch locks all associated drafts without losing them.
+        foreach ($control in $tables['Shared Claude'].Controls) {$control.Enabled=$controls.SharedClaudeEnabled.Checked}
+        $controls.SharedClaudeEnabled.Enabled=$true;$controls.SharedClaudeStatus.Enabled=$true
+        $controls.SharedClaudeName.Enabled=$false;$controls.SharedClaudeName.Text=$script:SharedClaudeOptions.Name
+        $controls.SharedClaudeStatus.Text=($script:ClaudeReadStatus+' | '+$script:ClaudeWriteStatus)
+        foreach ($kind in @('Read','Write')) {foreach ($suffix in @('Path','Browse','Interval')) {$controls['SharedClaude'+$kind+$suffix].Enabled=$controls.SharedClaudeEnabled.Checked -and $controls['SharedClaude'+$kind+'Enabled'].Checked}}
         $controls.SourceStatus.Text = Get-SharingStatus Source
     }
     # Update the lock and connection controls immediately when their draft switches change.
-    foreach ($key in @('SharedEnabled','WriteEnabled','ReadEnabled')) { $controls[$key].Add_CheckedChanged({ & $updateStatus }) }
+    foreach ($key in @('SharedEnabled','WriteEnabled','ReadEnabled','ClaudeEnabled','SharedClaudeEnabled','SharedClaudeReadEnabled','SharedClaudeWriteEnabled')) { $controls[$key].Add_CheckedChanged({ & $updateStatus }) }
+    $controls.ClaudePlacement.Add_SelectedIndexChanged({ & $updateStatus })
     $controls.Layout.Add_SelectedIndexChanged({ & $updateStatus })
     $statusTimer.Add_Tick($updateStatus)
     & $updateStatus

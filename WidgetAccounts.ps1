@@ -32,9 +32,9 @@ function New-AccountCard {
 }
 
 function Initialize-AccountViews {
-    # Place the two account cards in the existing data area beneath the one shared toolbar.
+    # Place the enabled account cards in the existing data area beneath the one shared toolbar.
     $script:WidgetSource = [IO.File]::ReadAllText((Join-Path $script:WidgetDirectory 'CodexUsageWidget.ps1'))
-    $script:AccountCards = @{ Local=(New-AccountCard); Remote=(New-AccountCard) }
+    $script:AccountCards = @{ Local=(New-AccountCard); Remote=(New-AccountCard); Claude=(New-AccountCard); SharedClaude=(New-AccountCard) }
     $script:AccountsHost = [Windows.Controls.Grid]::new()
     $script:AccountsHost.Visibility = 'Collapsed'
     [Windows.Controls.Grid]::SetRow($script:AccountsHost,1)
@@ -76,8 +76,9 @@ function Initialize-AccountViews {
     $script:AccountPicker.Add_SelectionChanged({
         if ($script:UpdatingAccountPicker) { return }
         # Save the source choice separately from the local account used for notifications.
-        $script:SelectedAccount = if ($script:AccountPicker.SelectedIndex -eq 1) { 'Remote' } else { 'Local' }
+        $script:SelectedAccount = $script:PickerKeys[$script:AccountPicker.SelectedIndex]
         Update-Display
+        Update-TrayIcon
         Save-WidgetState
     })
     $script:AccountsHost.Children.Add($script:AccountPicker) | Out-Null
@@ -88,19 +89,19 @@ function Initialize-AccountViews {
 }
 
 function Update-AccountNames {
-    # Update labels in place so synced nickname changes never change the selected account index.
-    $names = @($script:LocalDisplayName,$script:RemoteDisplayName)
-    $selected = if ($script:SelectedAccount -eq 'Remote') { 1 } else { 0 }
-    $script:UpdatingAccountPicker = $true
+    # Keep picker indices bound to stable enabled source keys, never to nickname text.
+    $keys = @(Get-EnabledAccounts)
+    $names = @($keys | ForEach-Object { Get-AccountName $_ })
+    if ($script:SelectedAccount -notin $keys -and $keys.Count) { $script:SelectedAccount=$keys[0] }
+    $script:UpdatingAccountPicker=$true
     try {
-        for ($index = 0; $index -lt 2; $index++) {
-            if ([string]$script:AccountPicker.Items[$index] -ne $names[$index]) { $script:AccountPicker.Items[$index] = $names[$index] }
-        }
-        $script:AccountPicker.SelectedIndex = $selected
-    } finally { $script:UpdatingAccountPicker = $false }
-    $script:AccountPicker.ToolTip = $names -join [Environment]::NewLine
+        if (($script:PickerKeys -join ',') -ne ($keys -join ',')) { $script:AccountPicker.Items.Clear(); foreach ($name in $names) { [void]$script:AccountPicker.Items.Add($name) } }
+        else { for ($index=0;$index -lt $names.Count;$index++) { if ([string]$script:AccountPicker.Items[$index] -ne $names[$index]) { $script:AccountPicker.Items[$index]=$names[$index] } } }
+        $script:PickerKeys=$keys
+        $script:AccountPicker.SelectedIndex=[array]::IndexOf($keys,$script:SelectedAccount)
+    } finally { $script:UpdatingAccountPicker=$false }
+    $script:AccountPicker.ToolTip=$names -join [Environment]::NewLine
 }
-
 function Set-AccountHeadingSize {
     param($Card,[double]$Width,[double]$Height)
     # Keep a smaller, shortened name above the numbers; remove only the optional freshness line first.
@@ -113,7 +114,7 @@ function Set-AccountHeadingSize {
 }
 
 function Render-AccountCard {
-    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote)
+    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote, [switch] $Claude, [switch] $SharedClaude)
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
     $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; Topmost=$true }
@@ -129,6 +130,14 @@ function Render-AccountCard {
             $script:PrimaryResetHours = $script:SharedPrimaryResetHours
             $script:ShowWeeklyResetDate = $script:SharedShowWeeklyResetDate
         }
+        # Claude owns its reset options and has no Codex credit balance.
+        if ($Claude) {
+            $script:CreditDisplayMode='Off'
+            $script:PrimaryResetHours=$script:ClaudeOptions.ResetHours
+            $script:ShowWeeklyResetDate=$script:ClaudeOptions.WeeklyDate
+        }
+        # Imported Claude uses the same quota renderer with independent reset preferences.
+        if ($SharedClaude) {$script:CreditDisplayMode='Off';$script:PrimaryResetHours=$script:SharedClaudeOptions.ResetHours;$script:ShowWeeklyResetDate=$script:SharedClaudeOptions.WeeklyDate}
         $colors = $script:ColorSchemes[$Scheme]
         foreach ($control in @($primaryPercent,$primaryBar,$compactPrimaryPercent)) { $control.Foreground = $colors[0] }
         foreach ($control in @($secondaryPercent,$secondaryBar,$compactSecondaryPercent)) { $control.Foreground = $colors[1] }
@@ -147,82 +156,84 @@ function Render-AccountCard {
 }
 
 function Update-AccountViews {
-    # Leave the established single-account layout intact until importing is explicitly enabled.
+    # Reuse one card renderer for any enabled combination of local, shared and Claude accounts.
     if (-not $script:AccountsHost -or $script:RenderingAccountCard) { return }
     Update-AccountNames
-    # Move the imported card between its shared host and independent window only when the layout changes.
     Update-SeparateWindows
-    # Explain the per-account close action only while the independent layout is active.
-    $closeButton.ToolTip = if ($script:SeparateWindowsActive) { 'Hide this account to tray' } else { 'Close Codex Usage' }
-    $hoverCloseButton.ToolTip = $closeButton.ToolTip
-    $script:AccountsHost.Visibility = if ($script:SharedEnabled -and $script:ReadUsageEnabled) { 'Visible' } else { 'Collapsed' }
-    $window.MinWidth = if ($script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Side by side') { 150 } else { 72 }
-    if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled) { return }
-    foreach ($control in @($primaryArea,$secondaryArea,$creditsArea,$ultraCompactPanel,$footerArea)) { $control.Visibility = 'Collapsed' }
-    # Reserve only the shared toolbar; each account owns its name and freshness label.
-    $outerBorder.Padding = [Windows.Thickness]::new(6)
-    $planText.Visibility = 'Collapsed'
-    $titleText.Text = if ($window.ActualWidth -ge 250) { 'CODEX USAGE' } else { 'CODEX' }
-    $dragArea.Height = [double]::NaN
-    $toolbar = $window.ActualWidth -ge 180 -and $window.ActualHeight -ge 125
-    $dragArea.Visibility = if ($toolbar) { 'Visible' } else { 'Collapsed' }
-    $compactRefreshButton.Visibility = 'Collapsed'
-    $width = [Math]::Max(1,$window.ActualWidth - 14)
-    $height = [Math]::Max(1,$window.ActualHeight - 14 - $(if ($toolbar) { 24 } else { 0 }))
-    # Rebuild grid tracks only when layout changes, not on every countdown tick.
-    if ($script:LastAccountLayout -ne $script:AccountLayout) {
-        $script:AccountsHost.RowDefinitions.Clear()
-        $script:AccountsHost.ColumnDefinitions.Clear()
-        if ($script:AccountLayout -eq 'Separate windows') {
-            $column = [Windows.Controls.ColumnDefinition]::new(); $script:AccountsHost.ColumnDefinitions.Add($column)
-            [Windows.Controls.Grid]::SetColumn($script:AccountCards.Local.Container,0)
-        } elseif ($script:AccountLayout -eq 'Side by side') {
-            foreach ($size in @('*','1','*')) { $column = [Windows.Controls.ColumnDefinition]::new(); $column.Width = [Windows.GridLengthConverter]::new().ConvertFromString($size); $script:AccountsHost.ColumnDefinitions.Add($column) }
-            [Windows.Controls.Grid]::SetColumn($script:AccountCards.Local.Container,0)
-            [Windows.Controls.Grid]::SetColumn($script:AccountCards.Remote.Container,2)
-            [Windows.Controls.Grid]::SetColumn($script:AccountDivider,1)
+    Update-ClaudeWindow
+    Update-SharedClaudeWindow
+    $keys = @(Get-EnabledAccounts | Where-Object { -not ($_ -eq 'Remote' -and $script:SeparateWindowsActive) -and -not ($_ -eq 'Claude' -and $script:ClaudeWindowActive) -and -not ($_ -eq 'SharedClaude' -and $script:SharedClaudeWindowActive) })
+    $originalSingle = $keys.Count -eq 1 -and $keys[0] -eq 'Local' -and -not $script:ClaudeOptions.Enabled -and -not ($script:SharedEnabled -and $script:ReadUsageEnabled) -and -not ($script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled)
+    # Keep a disabled local account from leaving an empty desktop shell behind detached accounts.
+    if (-not $keys.Count -and $window.IsLoaded) {$script:AutomaticallyHiddenHost=$true;$window.Hide()}
+    elseif ($keys.Count -and $script:AutomaticallyHiddenHost) {$script:AutomaticallyHiddenHost=$false;$window.Show()}
+    $script:AccountsHost.Visibility = if ($originalSingle) { 'Collapsed' } else { 'Visible' }
+    $window.MinWidth=if ($script:AccountLayout -eq 'Side by side' -and -not $originalSingle) { [Math]::Max(72,75*$keys.Count) } else {72}
+    $closeButton.ToolTip=if ($script:SeparateWindowsActive -or $script:ClaudeWindowActive) {'Hide this account to tray'} else {'Close Codex Usage'}
+    $hoverCloseButton.ToolTip=$closeButton.ToolTip
+    if ($originalSingle) { return }
+    foreach ($control in @($primaryArea,$secondaryArea,$creditsArea,$ultraCompactPanel,$footerArea)) { $control.Visibility='Collapsed' }
+    # Reserve only one toolbar; each card retains its account name while shrinking.
+    $outerBorder.Padding=[Windows.Thickness]::new(6)
+    $planText.Visibility='Collapsed'
+    $titleText.Text=if ($window.ActualWidth -ge 250) {'USAGE'} else {'USAGE'}
+    $dragArea.Height=[double]::NaN
+    $toolbar=$window.ActualWidth -ge 180 -and $window.ActualHeight -ge 125
+    $dragArea.Visibility=if ($toolbar) {'Visible'} else {'Collapsed'}
+    $compactRefreshButton.Visibility='Collapsed'
+    $width=[Math]::Max(1,$window.ActualWidth-14)
+    $height=[Math]::Max(1,$window.ActualHeight-14-$(if ($toolbar) {24} else {0}))
+    $picker=$script:AccountLayout -eq 'Account picker'
+    $signature=$script:AccountLayout + ':' + ($keys -join ',')
+    # Rebuild tracks only when layout or enabled sources change, not on countdown ticks.
+    if ($script:LastAccountLayout -ne $signature) {
+        $script:AccountsHost.RowDefinitions.Clear(); $script:AccountsHost.ColumnDefinitions.Clear()
+        foreach ($key in $keys) { [Windows.Controls.Grid]::SetRowSpan($script:AccountCards[$key].Container,1); [Windows.Controls.Grid]::SetColumn($script:AccountCards[$key].Container,0); [Windows.Controls.Grid]::SetRow($script:AccountCards[$key].Container,0) }
+        foreach ($line in @($script:AccountDivider)+@($script:ExtraAccountDividers)) { [void]$script:AccountsHost.Children.Remove($line) }
+        $script:ExtraAccountDividers=@()
+        if ($picker) {
+            foreach ($size in @('29','*')) { $row=[Windows.Controls.RowDefinition]::new(); $row.Height=[Windows.GridLengthConverter]::new().ConvertFromString($size); $script:AccountsHost.RowDefinitions.Add($row) }
+            foreach ($key in $keys) { [Windows.Controls.Grid]::SetRow($script:AccountCards[$key].Container,1) }
         } else {
-            foreach ($size in @('*','1','*')) { $row = [Windows.Controls.RowDefinition]::new(); $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($size); $script:AccountsHost.RowDefinitions.Add($row) }
-            foreach ($card in $script:AccountCards.Values) { [Windows.Controls.Grid]::SetColumn($card.Container,0) }
-            [Windows.Controls.Grid]::SetColumn($script:AccountDivider,0)
+            for ($index=0;$index -lt $keys.Count;$index++) {
+                $side=$script:AccountLayout -eq 'Side by side'
+                if ($index -gt 0) {
+                    # Give every adjacent pair a divider, including all three attached accounts.
+                    $line=[Windows.Controls.Border]::new(); $line.Background='#413D4658'
+                    if ($side) { $track=[Windows.Controls.ColumnDefinition]::new(); $track.Width=[Windows.GridLength]::new(1); $script:AccountsHost.ColumnDefinitions.Add($track); [Windows.Controls.Grid]::SetColumn($line,2*$index-1) }
+                    else { $track=[Windows.Controls.RowDefinition]::new(); $track.Height=[Windows.GridLength]::new(1); $script:AccountsHost.RowDefinitions.Add($track); [Windows.Controls.Grid]::SetRow($line,2*$index-1) }
+                    $script:ExtraAccountDividers+=,$line; [void]$script:AccountsHost.Children.Add($line)
+                }
+                if ($side) { $track=[Windows.Controls.ColumnDefinition]::new(); $script:AccountsHost.ColumnDefinitions.Add($track); [Windows.Controls.Grid]::SetColumn($script:AccountCards[$keys[$index]].Container,2*$index) }
+                else { $track=[Windows.Controls.RowDefinition]::new(); $script:AccountsHost.RowDefinitions.Add($track); [Windows.Controls.Grid]::SetRow($script:AccountCards[$keys[$index]].Container,2*$index) }
+            }
         }
-        [Windows.Controls.Grid]::SetRow($script:AccountCards.Local.Container,0)
-        # The detached card stays below its own toolbar, rather than following the shared grid's first row.
-        [Windows.Controls.Grid]::SetRow($script:AccountCards.Remote.Container,$(if ($script:AccountLayout -eq 'Separate windows') { 1 } elseif ($script:AccountLayout -eq 'Stacked') { 2 } else { 0 }))
-        [Windows.Controls.Grid]::SetRow($script:AccountDivider,$(if ($script:AccountLayout -eq 'Stacked') { 1 } else { 0 }))
-        $script:LastAccountLayout = $script:AccountLayout
+        $script:LastAccountLayout=$signature
     }
-    $picker = $script:AccountLayout -eq 'Account picker'
-    $script:AccountPicker.Visibility = if ($picker -and $width -ge 170) { 'Visible' } else { 'Collapsed' }
-    $script:AccountDivider.Visibility = if ($picker -or $script:AccountLayout -eq 'Separate windows') { 'Collapsed' } else { 'Visible' }
-    # Let the picker use one full-height card below its optional selector.
-    if ($picker) {
-        $script:AccountsHost.RowDefinitions[0].Height = [Windows.GridLength]::new($(if ($script:AccountPicker.Visibility -eq 'Visible') { 29 } else { 0 }))
-        $script:AccountsHost.RowDefinitions[1].Height = [Windows.GridLength]::new(1,'Star')
-        $script:AccountsHost.RowDefinitions[2].Height = [Windows.GridLength]::new(0)
-        foreach ($card in $script:AccountCards.Values) { [Windows.Controls.Grid]::SetRow($card.Container,1) }
-        $height -= $(if ($script:AccountPicker.Visibility -eq 'Visible') { 29 } else { 0 })
-    }
-    foreach ($key in @('Local','Remote')) {
-        if ($key -eq 'Remote' -and $script:AccountLayout -eq 'Separate windows') { continue }
-        $card = $script:AccountCards[$key]
-        $card.Container.Visibility = if (-not $picker -or $script:SelectedAccount -eq $key) { 'Visible' } else { 'Collapsed' }
+    $script:AccountPicker.Visibility=if ($picker -and $width -ge 100 -and $keys.Count) {'Visible'} else {'Collapsed'}
+    if ($picker) { $script:AccountsHost.RowDefinitions[0].Height=[Windows.GridLength]::new($(if ($script:AccountPicker.Visibility -eq 'Visible') {29} else {0})); $height-=$script:AccountsHost.RowDefinitions[0].Height.Value }
+    foreach ($key in @('Local','Remote','Claude','SharedClaude')) {
+        $card=$script:AccountCards[$key]
+        # Detached cards stay under their own shell; disabled cards collapse without stale values.
+        if (($key -eq 'Remote' -and $script:SeparateWindowsActive) -or ($key -eq 'Claude' -and $script:ClaudeWindowActive) -or ($key -eq 'SharedClaude' -and $script:SharedClaudeWindowActive)) { continue }
+        $card.Container.Visibility=if ($key -in $keys -and (-not $picker -or $script:SelectedAccount -eq $key)) {'Visible'} else {'Collapsed'}
         if ($card.Container.Visibility -eq 'Collapsed') { continue }
-        $cardWidth = if ($script:AccountLayout -eq 'Side by side') { ($width - 1) / 2 } else { $width }
-        $cardHeight = if ($script:AccountLayout -eq 'Stacked') { ($height - 1) / 2 } else { $height }
-        # Reserve a compact identity row before giving remaining space to usage values.
-        $headingHeight = Set-AccountHeadingSize $card $cardWidth $cardHeight
-        $snapshot = if ($key -eq 'Local') { $script:Usage } else { $script:RemoteUsage }
-        $name = if ($key -eq 'Local') { $script:LocalDisplayName } else { $script:RemoteDisplayName }
-        $plan = if ($snapshot.planType) { ([string]$snapshot.planType).ToUpperInvariant() + ' · ' } else { '' }
-        $status = if ($key -eq 'Remote') { Get-SharingStatus Source } elseif ($script:RefreshError) { 'Refresh failed · last reading retained' } else { 'Local account · ' + $(if ($snapshot) { 'updated ' + [DateTimeOffset]::FromUnixTimeSeconds([long]$snapshot.fetchedAt).ToLocalTime().ToString('h:mm tt') } else { 'waiting' }) }
-        if ($key -eq 'Remote' -and $script:ReadError) { $status = 'File unavailable · ' + $status }
-        $scheme = if ($key -eq 'Local') { $script:LocalScheme } else { $script:RemoteScheme }
-        Render-AccountCard -Remote:($key -eq 'Remote') -Card $card -Snapshot $snapshot -Name $name -Status ($plan + $status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight - $headingHeight))
+        $cardWidth=if ($script:AccountLayout -eq 'Side by side') {($width-($keys.Count-1))/$keys.Count} else {$width}
+        $cardHeight=if ($script:AccountLayout -in @('Stacked','Separate windows')) {($height-($keys.Count-1))/$keys.Count} else {$height}
+        $heading=Set-AccountHeadingSize $card $cardWidth $cardHeight
+        switch ($key) {
+            Local { $snapshot=$script:Usage; $scheme=$script:LocalScheme; $status=if ($script:RefreshError) {'Refresh failed - last reading retained'} elseif ($snapshot) {'Local account · updated '+[DateTimeOffset]::FromUnixTimeSeconds([long]$snapshot.fetchedAt).ToLocalTime().ToString('h:mm tt')} else {'Waiting for local usage'} }
+            Remote { $snapshot=$script:RemoteUsage; $scheme=$script:RemoteScheme; $status=Get-SharingStatus Source; if ($script:ReadError) {$status='File unavailable · '+$status} }
+            Claude { $snapshot=$script:ClaudeUsage; $scheme=$script:ClaudeOptions.Scheme; $status=$script:ClaudeStatus }
+            SharedClaude {$snapshot=$script:SharedClaudeUsage;$scheme=$script:SharedClaudeOptions.Scheme;$status=$script:SharedClaudeStatus}
+        }
+        $plan=if ($snapshot.planType) {([string]$snapshot.planType).ToUpperInvariant()+' · '} else {''}
+        Render-AccountCard -Remote:($key -eq 'Remote') -Claude:($key -eq 'Claude') -SharedClaude:($key -eq 'SharedClaude') -Card $card -Snapshot $snapshot -Name (Get-AccountName $key) -Status ($plan+$status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight-$heading))
     }
+    # With no attached account, Settings and the tray remain available to re-enable sources.
+    $script:AccountsHost.ToolTip=if (-not $keys.Count) {'No attached accounts enabled. Open Settings from the tray.'} else {$null}
     Update-HoverControls
 }
-
 function Set-WidgetPreset {
     param([ValidateSet('Mini','Small','Medium','Large / Default')] [string] $Name)
     # Preserve the old single-account presets and use dimensions suitable for each two-account layout.
@@ -236,6 +247,10 @@ function Set-WidgetPreset {
         }
     }
     $index = @('Mini','Small','Medium','Large / Default').IndexOf($Name)
+    # Size the main host for its enabled, attached cards; detached accounts keep their own presets.
+    $count=@(Get-EnabledAccounts | Where-Object {-not ($_ -eq 'Remote' -and $script:SeparateWindowsActive) -and -not ($_ -eq 'Claude' -and $script:ClaudeWindowActive) -and -not ($_ -eq 'SharedClaude' -and $script:SharedClaudeWindowActive)}).Count
+    if ($count -gt 1 -and $script:AccountLayout -eq 'Side by side') {$sizes=@(@((75*$count),72),@((150*$count),180),@((200*$count),250),@((280*$count),330))}
+    if ($count -gt 1 -and $script:AccountLayout -in @('Stacked','Separate windows')) {$sizes=@(@(72,(72*$count)),@(180,(160*$count)),@(240,(235*$count)),@(300,(300*$count)))}
     $window.Width = $sizes[$index][0]
     $window.Height = $sizes[$index][1]
     Update-Display
@@ -395,14 +410,14 @@ function Show-SharedWidget {
 function Update-WidgetClock {
     # Keep countdowns running while either account window remains visible.
     if (-not $clockTimer) { return }
-    if ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible)) { $clockTimer.Start() }
+    if ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible) -or ($script:ClaudeView -and $script:ClaudeView.Window.IsVisible) -or ($script:SharedClaudeView -and $script:SharedClaudeView.Window.IsVisible)) { $clockTimer.Start() }
     else { $clockTimer.Stop() }
 }
 
 function Update-SeparateWindows {
     # Transition windows only after startup has loaded real bounds, avoiding duplicate shells in tests.
     if ($script:ChangingAccountWindows -or -not ($window -is [Windows.Window]) -or -not $window.IsLoaded) { return }
-    $separate = $script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Separate windows'
+    $separate = $script:LocalEnabled -and $script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Separate windows'
     if ($separate -ne [bool]$script:SeparateWindowsActive) {
         $script:ChangingAccountWindows = $true
         try {

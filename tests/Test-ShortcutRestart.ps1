@@ -7,7 +7,7 @@ $source=[IO.File]::ReadAllText((Join-Path $project 'Start-CodexUsageWidget.ps1')
 $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$null,[ref]$null)
 $close=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Close-ExistingWidgets'},$true)
 Invoke-Expression $close.Extent.Text
-foreach ($scenario in @('Visible','LocalHidden','BothHidden','SettingsOpen','Single')) {
+foreach ($scenario in @('Visible','LocalHidden','BothHidden','SettingsOpen','Single','FourAccounts')) {
     # Target only this isolated child process; the user's running widget remains untouched.
     $state=Join-Path ([IO.Path]::GetTempPath()) ('CodexUsageWidget-restart-'+$scenario+'-'+[guid]::NewGuid().ToString('N'))
     [void](New-Item -ItemType Directory -Path $state)

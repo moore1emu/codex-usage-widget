@@ -4,6 +4,12 @@ $script:TestState=$StateFolder
 . (Join-Path $PSScriptRoot 'Initialize-TestWidget.ps1')
 $script:SharedEnabled=$Scenario -ne 'Single'; $script:ReadUsageEnabled=$script:SharedEnabled
 $script:AccountLayout='Separate windows'
+# Include both detached Claude cards without connecting to any account service.
+if ($Scenario -eq 'FourAccounts') {
+    $script:ClaudeOptions.Enabled=$true
+    $script:SharedClaudeOptions.Enabled=$true;$script:SharedClaudeOptions.ReadEnabled=$true
+    $script:ClaudeUsage=$script:Usage;$script:SharedClaudeUsage=$script:RemoteUsage
+}
 $window.Show(); $window.UpdateLayout(); Update-Display
 # Use deterministic dimensions so the parent can verify final state persistence after exit.
 $window.Left=100; $window.Top=100; $window.Width=190; $window.Height=210
@@ -27,7 +33,7 @@ try {
         [Windows.Threading.Dispatcher]::Run()
     }
     # Confirm complete application shutdown rather than just disappearing account windows.
-    if ($window.IsVisible -or ($script:SeparateView -and $peer.IsVisible) -or $script:SettingsForm) { throw 'Restart left a window open.' }
+    if ($window.IsVisible -or ($script:SeparateView -and $peer.IsVisible) -or ($script:ClaudeView -and $script:ClaudeView.Window.IsVisible) -or ($script:SharedClaudeView -and $script:SharedClaudeView.Window.IsVisible) -or $script:SettingsForm) { throw 'Restart left a window open.' }
     [IO.File]::WriteAllText((Join-Path $StateFolder 'shutdown'),'all windows closed')
 } finally {
     if (-not $script:ExitRequested) { Close-TestWidget }
