@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.4.2.
+This guide covers AI Usage Widget 2.5.0.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
@@ -99,30 +99,26 @@ Settings remains open without blocking either desktop window. Account picker lab
 
 **Apply** validates, saves, and displays changes without closing Settings. **Save** does the same and closes. **Cancel** discards unapplied edits; it does not undo changes already applied.
 
-Each account has separate **Use General defaults** switches for refresh, reset display and notifications. Codex accounts can also inherit credit display. Checked groups preview General's values and lock the account controls; unchecking restores custom values. **Apply** saves defaults and overrides without closing the dialog; **Cancel** discards changes made since the last Apply. Existing installations retain their account choices with inheritance off. Colors, names, account enable switches, connection files and publishing cadence remain independent. For shared sources, inherited refresh controls the input file-reading cadence.
+Each account has one **Use General defaults** switch at the top for refresh, reset display and notifications, plus credit display for Codex. Checking it previews General's values and locks those account controls; unchecking restores all manual values. Earlier mixed inheritance is preserved with a mixed mark until you change the switch. **Apply** saves defaults and overrides without closing the dialog; **Cancel** discards changes made since the last Apply. Existing account choices and saved manual values are preserved. Colors, names, account enable switches, connection files and publishing cadence remain independent. For shared sources, inherited refresh controls the input file-reading cadence.
 
 Wide, short windows automatically show static metric columns: 5-hour, weekly and credits when enabled. Account names remain above each group; unavailable/disabled Claude credits stay blank. There is no animation or scrolling. Shrinking to about menu-bar height puts each account name and its metrics on one line. As width decreases, countdowns drop before metric labels; names shorten only afterward. Full reset details remain available on hover, and the thin height is saved for reopening. Stacked accounts each retain one readable line. Increasing height restores the larger layouts.
 
-**Enable shared Codex account** unlocks its controls. Turning it off and applying stops file writing/reading, hides the second account, stops its alerts and file timers, and preserves all connection and account choices. The switch remains available while the rest of Shared is locked. Writing and reading have independent switches within the enabled tab.
+**Enable shared Codex account** unlocks imported-account controls. Turning it off stops imported readings, display and alerts while preserving its saved choices. Local publishing is independent: configure **Write my usage to JSON** on **Codex** or **Write local Claude usage to JSON** on **Claude**. Publishing stops when that local source is disabled. Shared tabs contain only incoming file connections.
 
-Codex and Shared screenshots are in the [README](README.md). File connections appear farther down Shared:
-
-<img src="docs/screenshots/settings-shared-connections.png" alt="Shared file connection settings" width="340">
-
-<img src="docs/screenshots/settings-menu.png" alt="Tray menu" width="220">
+Current account and connection screenshots are in the [README](README.md).
 
 ## Two computers and file sharing
 
 The same OneDrive folder can be used from multiple Windows computers at the same time. Each computer needs Codex and PowerShell 7 installed and must be signed in to Codex locally. Credentials and Codex caches remain local to each computer; the widget scripts sync through OneDrive. Optional usage JSON files contain quota information, not credentials.
 
 
-Sharing is opt-in and configured separately on each computer under **Settings... → Shared Codex**. Both machines need access to a private synced folder, such as OneDrive. They may use different Codex accounts. Keep the JSON files outside the public widget project and do not commit them to Git.
+Sharing is opt-in: outgoing Codex files are configured under **Settings... → Codex**, and incoming files under **Shared Codex**. Both machines need access to a private synced folder, such as OneDrive. They may use different Codex accounts. Keep the JSON files outside the public widget project and do not commit them to Git.
 
 1. Create a private shared folder, for example `WidgetUsage`, separate from this project.
-2. On Computer A, turn on **Enable shared Codex account**, enable **Write my usage to JSON**, give it a nickname, and choose a new `account-a.json` output file. Save to create its first file after a successful local reading.
-3. On Computer B, enable Shared and do the same with a different nickname and `account-b.json`.
-4. After the files sync, enable **Read the shared computer's JSON** on A and select B's file; on B select A's file. Paths may differ between computers. Never select the same file as input and output.
-5. On **Shared Codex**, select Side by side, Stacked, Account picker, or Separate windows and a palette for the second account. Use **Codex** for the local palette. Then choose a window preset if needed.
+2. On Computer A, open **Codex**, enable **Write my usage to JSON**, give it a nickname, and choose a new `account-a.json` output file. Save to create its first file after a successful local reading.
+3. On Computer B, use **Codex** to do the same with a different nickname and `account-b.json`. Neither computer needs to enable its shared account just to publish.
+4. After the files sync, enable **Shared Codex** and **Read the shared computer's JSON** on A and select B's file; on B select A's file. Paths may differ between computers. Never select the same file as input and output.
+5. On **General**, select Side by side, Stacked, Account picker, or Separate windows. Use **Shared Codex** for the shared palette and **Codex** for the local palette. Then choose a window preset if needed.
 
 | Connection | Computer A | Computer B |
 | --- | --- | --- |
@@ -172,7 +168,7 @@ Choose an independent refresh interval and palette, reset details, warning thres
 
 ## Sharing Claude between computers
 
-In **Shared Claude**, enable the master switch and choose separate Claude output and input JSON files outside the public project. Each computer writes its own local Claude reading and reads the other computer’s file. Do not reuse Codex JSON files: snapshots carry a provider label and incorrect provider files are rejected. Both computers should use version 2.2.0 or later.
+In **Claude**, enable local JSON writing and choose an output file outside the public project. In **Shared Claude**, enable the imported account and choose its input JSON file only when you want to read another computer. Each computer writes its own local Claude reading and reads the other computer’s file. Do not reuse Codex JSON files: snapshots carry a provider label and incorrect provider files are rejected. Both computers should use version 2.2.0 or later.
 
 Write and read switches and intervals are independent. Matching reads follow the local Claude refresh interval even if local Claude is disabled; manual-only stays manual. Local Claude must be enabled and freshly connected to publish new readings. Exports change only when usage or account metadata changes, with automatic 30-minute check-ins. Shared Claude has its own colors, reset display, notifications, placement, window size and position. Its name comes from the imported file. Failed or stale imports keep the last known reading and cannot trigger fresh-usage alerts.
 

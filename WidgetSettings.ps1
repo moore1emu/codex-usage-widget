@@ -188,7 +188,7 @@ function Show-WidgetSettings {
     $controls.SharedEnabled.Checked = $script:SharedEnabled
     Add-SettingsRow $tables.Shared '' $controls.SharedEnabled
     $controls.SharedLock = Add-SettingsNote $tables.Shared ''
-    # Keep second-account layout and palette controls beside their shared-file connections.
+    # Keep the common layout in General and each palette on its own account tab.
     $controls.Layout = New-SettingsChoice @('Side by side','Stacked','Account picker','Separate windows') $script:AccountLayout
     Add-SettingsRow $tables.Defaults 'Account layout' $controls.Layout
     # Keep the choice tied to its account index even when both accounts have the same nickname.
@@ -239,13 +239,15 @@ function Show-WidgetSettings {
     $controls.Name.MaxLength = 40
     $controls.Name.Text = $script:LocalDisplayName
     foreach ($kind in @('Write','Read')) {
+        # Publishing belongs to the local source; importing belongs to the shared account.
+        $connectionTable = if ($kind -eq 'Write') { $tables.General } else { $tables.Shared }
         $enable = [Windows.Forms.CheckBox]::new()
         $enable.AutoSize = $true
         $enable.Text = if ($kind -eq 'Write') { 'Write my usage to JSON' } else { 'Read the shared computer''s JSON' }
         $enable.Checked = if ($kind -eq 'Write') { $script:WriteUsageEnabled } else { $script:ReadUsageEnabled }
         $controls[$kind + 'Enabled'] = $enable
-        Add-SettingsRow $tables.Shared '' $enable
-        if ($kind -eq 'Write') { Add-SettingsRow $tables.Shared 'My display name' $controls.Name }
+        Add-SettingsRow $connectionTable '' $enable
+        if ($kind -eq 'Write') { Add-SettingsRow $connectionTable 'Display name' $controls.Name }
         $path = [Windows.Forms.TextBox]::new()
         $path.Text = if ($kind -eq 'Write') { $script:UsageOutputPath } else { $script:UsageInputPath }
         $controls[$kind + 'Path'] = $path
@@ -263,12 +265,12 @@ function Show-WidgetSettings {
             } finally { $chooser.Dispose() }
         })
         $controls[$kind + 'Browse'] = $browse
-        Add-SettingsRow $tables.Shared $(if ($kind -eq 'Write') { 'Output file' } else { 'Input file' }) $path $browse
+        Add-SettingsRow $connectionTable $(if ($kind -eq 'Write') { 'Output file' } else { 'Input file' }) $path $browse
         $interval = if ($kind -eq 'Write') { $script:WriteIntervalMinutes } else { $script:ReadIntervalMinutes }
         $choice = New-SettingsChoice $intervalChoices $intervalChoices[$intervalValues.IndexOf($interval)]
         $controls[$kind + 'Interval'] = $choice
-        Add-SettingsRow $tables.Shared ($kind + ' frequency') $choice
-        $controls[$kind + 'Status'] = Add-SettingsNote $tables.Shared ''
+        Add-SettingsRow $connectionTable ($kind + ' frequency') $choice
+        $controls[$kind + 'Status'] = Add-SettingsNote $connectionTable ''
     }
     $controls.SourceStatus = Add-SettingsNote $tables.Shared ''
     # Keep alerts local even while displaying a remote account or both accounts together.
@@ -324,7 +326,7 @@ function Show-WidgetSettings {
     Set-SettingsHelp $settingsToolTip $controls.ClaudeResetAlert 'A reset notification requires known weekly quota above 0%.'
     foreach ($key in @('ClaudePrimaryAlert','ClaudeSecondaryAlert')) {Set-SettingsHelp $settingsToolTip $controls[$key] '0 = off. Warnings appear once per threshold crossing, only after successful refreshes.'}
     Set-SettingsHelp $settingsToolTip $controls.LocalEnabled 'Turning off local Codex hides its panel and stops local refreshes, notifications and JSON publishing. Shared Codex and Claude remain independent.'
-    # Shared Claude mirrors the account controls, with a subscription connection rather than shared JSON.
+    # Imported Claude mirrors the account controls and reads its own private JSON file.
     $controls.SharedClaudeEnabled=[Windows.Forms.CheckBox]::new()
     $controls.SharedClaudeEnabled.Text='Enable shared Claude account'
     $controls.SharedClaudeEnabled.AutoSize=$true
@@ -352,10 +354,12 @@ function Show-WidgetSettings {
     }
     # The local Claude publisher and imported Claude reader use distinct private JSON files.
     foreach ($kind in @('Write','Read')) {
+        # Keep Claude exports independent of the imported Claude source switch.
+        $connectionTable = if ($kind -eq 'Write') { $tables.Claude } else { $tables['Shared Claude'] }
         $check=[Windows.Forms.CheckBox]::new();$check.AutoSize=$true
         $check.Text=if ($kind -eq 'Write') {'Write local Claude usage to JSON'} else {'Read shared Claude JSON'}
         $check.Checked=$script:SharedClaudeOptions[$kind+'Enabled'];$controls['SharedClaude'+$kind+'Enabled']=$check
-        Add-SettingsRow $tables['Shared Claude'] '' $check
+        Add-SettingsRow $connectionTable '' $check
         $path=[Windows.Forms.TextBox]::new();$path.Text=$script:SharedClaudeOptions[$(if ($kind -eq 'Write') {'OutputPath'} else {'InputPath'})]
         $controls['SharedClaude'+$kind+'Path']=$path
         $browse=[Windows.Forms.Button]::new();$browse.Text='Browse…';$browse.Tag=@{Kind=$kind;Input=$path}
@@ -365,11 +369,12 @@ function Show-WidgetSettings {
             try {$chooser.Filter='Usage JSON (*.json)|*.json';$chooser.FileName=$sender.Tag.Input.Text;if ($chooser.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {$sender.Tag.Input.Text=$chooser.FileName}} finally {$chooser.Dispose()}
         })
         $controls['SharedClaude'+$kind+'Browse']=$browse
-        Add-SettingsRow $tables['Shared Claude'] ($kind+' file') $path $browse
+        Add-SettingsRow $connectionTable ($kind+' file') $path $browse
         $choice=New-SettingsChoice $intervalChoices $intervalChoices[$intervalValues.IndexOf($script:SharedClaudeOptions[$kind+'Interval'])]
         $controls['SharedClaude'+$kind+'Interval']=$choice
-        Add-SettingsRow $tables['Shared Claude'] ($kind+' frequency') $choice
+        Add-SettingsRow $connectionTable ($kind+' frequency') $choice
     }
+    $controls.ClaudeWriteStatus=Add-SettingsNote $tables.Claude ''
     $controls.SharedClaudeStatus=Add-SettingsNote $tables['Shared Claude'] ''
     Set-SettingsHelp $settingsToolTip $controls.SharedClaudeWritePath 'Choose a different private output JSON file on each computer. Claude and Codex use separate files. Writes happen only after quota changes, with an automatic 30-minute check-in.'
     Set-SettingsHelp $settingsToolTip $controls.SharedClaudeReadPath 'Select the other computer''s Claude export. Match Claude refresh or choose a separate cadence. Imported alerts require fresh readings.'
@@ -387,7 +392,7 @@ function Show-WidgetSettings {
     }
     Set-SettingsHelp $settingsToolTip $controls.SharedResetAlert 'Reset alerts require weekly quota above 0%. Missing or stale files do not trigger alerts.'
     Set-SettingsHelp $settingsToolTip $controls.Layout 'Use independent settings for the second account. Side by side keeps two numeric columns at Mini size.'
-    Set-SettingsHelp $settingsToolTip $controls.SharedEnabled 'Unlock shared settings and enable the selected file connections. Turning Shared off preserves your choices and stops its display, file operations and notifications after Apply or Save.'
+    Set-SettingsHelp $settingsToolTip $controls.SharedEnabled 'Unlock shared settings and enable the selected file connections. Turning Shared off preserves your choices and stops imported display, reads and notifications after Apply or Save. Local JSON publishing is controlled on the Codex tab.'
     foreach ($key in @('WritePath','ReadPath','WriteBrowse','ReadBrowse')) {
         Set-SettingsHelp $settingsToolTip $controls[$key] 'Use different output files on the two computers. Keep shared usage outside the public widget project. Writes occur when usage or account details change, with a 30-minute check-in during automatic sharing. Manual only remains manual. Last usage change is separate from the actual last check.'
     }
@@ -401,21 +406,23 @@ function Show-WidgetSettings {
             foreach ($item in $entry.Items.Values) { [void]$defaultManagedControls.Add($item.Control) }
         }
     }
+    # The account-wide defaults switches receive only their final account lock state.
+    foreach ($account in $defaultsBindings.Keys) {[void]$defaultManagedControls.Add($controls[$account+'UseDefaults'])}
     $masterManagedControls=[Collections.Generic.HashSet[Windows.Forms.Control]]::new($defaultManagedControls)
     foreach ($key in @('SharedEnabled','SharedLock','Name','ClaudeEnabled','ClaudeStatus','ClaudeConnect','ClaudeSize','SharedClaudeEnabled','SharedClaudeStatus','SharedClaudeName')) { [void]$masterManagedControls.Add($controls[$key]) }
     foreach ($kind in @('Read','Write')) { foreach ($suffix in @('Path','Browse','Interval')) { [void]$masterManagedControls.Add($controls['SharedClaude'+$kind+$suffix]);[void]$masterManagedControls.Add($controls[$kind+$suffix]) } }
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
         # Validate Claude sharing paths before applying any draft account switches.
-        $claudeOutput=if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked) {Resolve-UsageFilePath $controls.SharedClaudeWritePath.Text} else {$controls.SharedClaudeWritePath.Text.Trim()}
+        $claudeOutput=if ($controls.ClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked) {Resolve-UsageFilePath $controls.SharedClaudeWritePath.Text} else {$controls.SharedClaudeWritePath.Text.Trim()}
         $claudeInput=if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeReadEnabled.Checked) {Resolve-UsageFilePath $controls.SharedClaudeReadPath.Text} else {$controls.SharedClaudeReadPath.Text.Trim()}
-        if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked -and $controls.SharedClaudeReadEnabled.Checked -and $claudeOutput -eq $claudeInput) {throw 'Claude input and output must be different files.'}
-        if ($controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked -and -not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($claudeOutput))) {throw 'Choose an existing private Claude output folder.'}
+        if ($controls.ClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked -and $controls.SharedClaudeEnabled.Checked -and $controls.SharedClaudeReadEnabled.Checked -and $claudeOutput -eq $claudeInput) {throw 'Claude input and output must be different files.'}
+        if ($controls.ClaudeEnabled.Checked -and $controls.SharedClaudeWriteEnabled.Checked -and -not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($claudeOutput))) {throw 'Choose an existing private Claude output folder.'}
         # Validate all sharing paths before changing any persistent setting.
-        $output = if ($controls.SharedEnabled.Checked -and $controls.WriteEnabled.Checked) { Resolve-UsageFilePath $controls.WritePath.Text } else { $controls.WritePath.Text.Trim() }
+        $output = if ($controls.LocalEnabled.Checked -and $controls.WriteEnabled.Checked) { Resolve-UsageFilePath $controls.WritePath.Text } else { $controls.WritePath.Text.Trim() }
         $inputPath = if ($controls.SharedEnabled.Checked -and $controls.ReadEnabled.Checked) { Resolve-UsageFilePath $controls.ReadPath.Text } else { $controls.ReadPath.Text.Trim() }
-        if ($controls.SharedEnabled.Checked -and $controls.WriteEnabled.Checked -and $controls.ReadEnabled.Checked -and $output -eq $inputPath) { throw 'Input and output must be different files.' }
-        if ($controls.SharedEnabled.Checked -and $controls.WriteEnabled.Checked -and -not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($output))) { throw 'Choose an existing private output folder.' }
+        if ($controls.LocalEnabled.Checked -and $controls.WriteEnabled.Checked -and $controls.SharedEnabled.Checked -and $controls.ReadEnabled.Checked -and $output -eq $inputPath) { throw 'Input and output must be different files.' }
+        if ($controls.LocalEnabled.Checked -and $controls.WriteEnabled.Checked -and -not [IO.Directory]::Exists([IO.Path]::GetDirectoryName($output))) { throw 'Choose an existing private output folder.' }
         $name = ($controls.Name.Text -replace '[\p{C}]','').Trim()
         if (-not $name) { $name = 'This computer' }
         if ((Get-LaunchAtSignIn) -ne $controls.Startup.Checked) { Set-LaunchAtSignIn $controls.Startup.Checked }
@@ -543,13 +550,15 @@ function Show-WidgetSettings {
         $controls.SharedLock.Text = if ($sharedOn) { 'Unlocked - Shared is enabled' } else { 'Locked - enable Shared to change settings' }
         $base = @(1,5,15,30,0)[$controls.Refresh.SelectedIndex]
         foreach ($kind in @('Write','Read')) {
-            $enabled = $sharedOn -and $controls[$kind + 'Enabled'].Checked
+            $enabled = $(if ($kind -eq 'Write') {$controls.LocalEnabled.Checked} else {$sharedOn}) -and $controls[$kind + 'Enabled'].Checked
             foreach ($suffix in @('Path','Browse','Interval')) { $connectionControl=$controls[$kind+$suffix];if (-not $defaultManagedControls.Contains($connectionControl)) { $connectionControl.Enabled=$enabled } }
             $selected = $intervalValues[$controls[$kind + 'Interval'].SelectedIndex]
             $cadence = if ($selected -eq -1) { "matches widget: $base min (0 = manual)" } elseif ($selected -eq 0) { 'manual only' } else { "every $selected min · separate timer" }
             $controls[$kind + 'Status'].Text = (Get-SharingStatus $kind) + ' | Selected: ' + $cadence
         }
-        $controls.Name.Enabled = $sharedOn -and $controls.WriteEnabled.Checked
+        $controls.WriteEnabled.Enabled=$controls.LocalEnabled.Checked
+        $controls.SharedClaudeWriteEnabled.Enabled=$controls.ClaudeEnabled.Checked
+        $controls.Name.Enabled = $controls.LocalEnabled.Checked
         $controls.Account.Enabled = $controls.Layout.SelectedItem -eq 'Account picker'
         # A disabled Claude source locks its drafts while preserving every saved value.
         foreach ($control in $tables.Claude.Controls) {if (-not $masterManagedControls.Contains($control)) {$control.Enabled=$controls.ClaudeEnabled.Checked}}
@@ -562,13 +571,15 @@ function Show-WidgetSettings {
         foreach ($control in $tables['Shared Claude'].Controls) {if (-not $masterManagedControls.Contains($control)) {$control.Enabled=$controls.SharedClaudeEnabled.Checked}}
         $controls.SharedClaudeEnabled.Enabled=$true;$controls.SharedClaudeStatus.Enabled=$true
         $controls.SharedClaudeName.Enabled=$false;$controls.SharedClaudeName.Text=$script:SharedClaudeOptions.Name
-        $controls.SharedClaudeStatus.Text=($script:ClaudeReadStatus+' | '+$script:ClaudeWriteStatus)
-        foreach ($kind in @('Read','Write')) {foreach ($suffix in @('Path','Browse','Interval')) {$connectionControl=$controls['SharedClaude'+$kind+$suffix];if (-not $defaultManagedControls.Contains($connectionControl)) {$connectionControl.Enabled=$controls.SharedClaudeEnabled.Checked -and $controls['SharedClaude'+$kind+'Enabled'].Checked}}}
+        $controls.SharedClaudeStatus.Text=$script:ClaudeReadStatus
+        $controls.ClaudeWriteStatus.Text=$script:ClaudeWriteStatus
+        $controls.SharedClaudeWriteEnabled.Enabled=$controls.ClaudeEnabled.Checked
+        foreach ($kind in @('Read','Write')) {foreach ($suffix in @('Path','Browse','Interval')) {$connectionControl=$controls['SharedClaude'+$kind+$suffix];if (-not $defaultManagedControls.Contains($connectionControl)) {$connectionControl.Enabled=$(if ($kind -eq 'Write') {$controls.ClaudeEnabled.Checked} else {$controls.SharedClaudeEnabled.Checked}) -and $controls['SharedClaude'+$kind+'Enabled'].Checked}}}
         $controls.SourceStatus.Text = Get-SharingStatus Source
         Update-DefaultsControls $controls $defaultsBindings
     }
     # Update the lock and connection controls immediately when their draft switches change.
-    foreach ($key in @('SharedEnabled','WriteEnabled','ReadEnabled','ClaudeEnabled','SharedClaudeEnabled','SharedClaudeReadEnabled','SharedClaudeWriteEnabled')) { $controls[$key].Add_CheckedChanged({ & $updateStatus }) }
+    foreach ($key in @('LocalEnabled','SharedEnabled','WriteEnabled','ReadEnabled','ClaudeEnabled','SharedClaudeEnabled','SharedClaudeReadEnabled','SharedClaudeWriteEnabled')) { $controls[$key].Add_CheckedChanged({ & $updateStatus }) }
     # Apply inheritance locks immediately, with the same open-dropdown deferral as other settings.
     foreach ($account in $defaultsBindings.Keys) {
         foreach ($entry in $defaultsBindings[$account].Values) { $entry.Check.Add_CheckedChanged({ & $updateStatus }) }
@@ -605,5 +616,5 @@ function Update-SharingTimer {
     # Automatic matched writers also need a timer for their 30-minute check-in; manual writers stay idle.
     if (-not $script:SharingTimer) { return }
     $script:SharingTimer.Stop()
-    if ($script:SharedEnabled -and (($script:WriteUsageEnabled -and ($script:WriteIntervalMinutes -gt 0 -or ($script:WriteIntervalMinutes -eq -1 -and $script:RefreshIntervalMinutes -gt 0))) -or ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0))) { $script:SharingTimer.Start() }
+    if ((($script:LocalEnabled -and $script:WriteUsageEnabled -and ($script:WriteIntervalMinutes -gt 0 -or ($script:WriteIntervalMinutes -eq -1 -and $script:RefreshIntervalMinutes -gt 0))) -or ($script:SharedEnabled -and $script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0))) { $script:SharingTimer.Start() }
 }

@@ -4,7 +4,7 @@
 
 A small Windows desktop and tray widget for **Codex and Claude subscription usage left**, reset times, credits where available, and notifications. Show local accounts and accounts from another computer through private shared JSON files.
 
-**Version 2.4.2** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.5.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -34,7 +34,7 @@ Drag to move; hover to resize from either bottom corner. Use **↻** to refresh,
 
 ## Settings
 
-Right-click the tray icon → **Settings...**. **General** holds window/startup controls and default refresh, reset-display, notification and Codex credit settings. **Codex**, **Shared Codex**, **Claude**, and **Shared Claude** each have separate “Use General defaults” switches by group; unchecking restores the account’s custom values. Colors stay independent. Turn off any source you do not use; its panel, refreshes and alerts stop. You can use the widget while Settings is open. **Apply** updates the widget without closing Settings; **Save** applies and closes. Shared settings lock when **Enable shared Codex account** is off. Hover over settings or their labels for help. **0 disables a warning threshold.** Reset alerts require weekly quota above 0%.
+Right-click the tray icon → **Settings...**. **General** holds window/startup controls and default refresh, reset-display, notification and Codex credit settings. **Codex**, **Shared Codex**, **Claude**, and **Shared Claude** each have one “Use General defaults” switch at the top for all supported account settings; unchecking restores the account’s manual values. Colors stay independent. Turn off any source you do not use; its panel, refreshes and alerts stop. You can use the widget while Settings is open. **Apply** updates the widget without closing Settings; **Save** applies and closes. Shared settings lock when **Enable shared Codex account** is off. Hover over settings or their labels for help. **0 disables a warning threshold.** Reset alerts require weekly quota above 0%.
 
 | General defaults | Shared Codex |
 | --- | --- |
@@ -49,11 +49,11 @@ Right-click the tray icon → **Settings...**. **General** holds window/startup 
 
 </details>
 
-For two accounts, choose a private synced folder outside this project. Each computer writes its own file and reads the other's. Shared starts off; enable it to unlock the connection and second-account settings. Choose **Side by side**, **Stacked**, **Account picker**, or **Separate windows**; Side by side keeps two numeric columns at Mini size. Separate windows remember independent sizes and positions; use the tray menu to reopen either account. File checks can match the widget or use separate timers. Exports change only when usage or account details change, with an automatic check-in at least every 30 minutes. [Setup instructions](extradetails.md#two-computers-and-file-sharing).
+For two accounts, choose a private synced folder outside this project. Each computer writes its own file from its **Codex** or **Claude** source tab and reads the other’s from **Shared Codex** or **Shared Claude**. Exporting works with the shared account disabled; enable shared accounts only to import readings. Choose **Side by side**, **Stacked**, **Account picker**, or **Separate windows**; Side by side keeps two numeric columns at Mini size. Separate windows remember independent sizes and positions; use the tray menu to reopen either account. File checks can match the widget or use separate timers. Exports change only when usage or account details change, with an automatic check-in at least every 30 minutes. [Setup instructions](extradetails.md#two-computers-and-file-sharing).
 
 For Claude, enable it in **Settings → Claude**, click **Apply**, then **Connect / open Claude Usage** and sign in on Claude’s website. An optional Microsoft WebView2 browser profile stays private on this computer. Developer API token usage and spending are not included. [Claude setup and limitations](extradetails.md#claude-subscriptions).
 
-Screenshots are rendered from the current widget with real usage readings captured for this release. Account names are neutral and private file paths are replaced with placeholders. Settings stay local to each computer.
+Widget screenshots show captured real usage readings; settings screenshots show the current release. Account names are neutral and private file paths are replaced with placeholders. Settings stay local to each computer.
 
 ## Disclaimer
 

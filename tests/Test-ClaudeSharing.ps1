@@ -16,7 +16,7 @@ $script:ClaudeOptions.Enabled=$true
 $script:ClaudeOptions.Name='Example Claude'
 $script:ClaudeStatus='Subscription · updated now'
 $script:ClaudeUsage=ConvertTo-ClaudeUsage @{five_hour=@{utilization=40;resets_at=[DateTimeOffset]::Now.AddHours(2).ToString('o')};seven_day=@{utilization=70;resets_at=[DateTimeOffset]::Now.AddDays(4).ToString('o')}}
-$script:SharedClaudeOptions.Enabled=$true;$script:SharedClaudeOptions.WriteEnabled=$true
+$script:SharedClaudeOptions.Enabled=$false;$script:SharedClaudeOptions.WriteEnabled=$true
 $script:SharedClaudeOptions.OutputPath=Join-Path $script:StateDirectory 'local-claude.json'
 # Publishing Claude must not borrow disabled local Codex preferences or identity.
 Invoke-ClaudeSharing -Force
@@ -29,6 +29,7 @@ $script:ClaudeUsage.fetchedAt++
 Invoke-ClaudeSharing -Force
 if ([IO.File]::GetLastWriteTimeUtc($script:SharedClaudeOptions.OutputPath) -ne $stamp) {throw 'An unchanged Claude poll rewrote shared JSON.'}
 # Import a distinct computer's Claude file and use its display name.
+$script:SharedClaudeOptions.Enabled=$true
 $script:SharedClaudeOptions.ReadEnabled=$true
 $script:SharedClaudeOptions.InputPath=Join-Path $script:StateDirectory 'shared-claude.json'
 $published.sourceId=[guid]::NewGuid().ToString('N');$published.displayName='Example shared Claude'

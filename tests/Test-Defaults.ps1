@@ -5,6 +5,35 @@ try {
     foreach ($account in $script:AccountUseDefaults.Keys) {
         foreach ($enabled in $script:AccountUseDefaults[$account].Values) { if ($enabled) { throw 'Migration enabled inheritance without a choice.' } }
     }
+    # Reopen untouched JSON-loaded dropdowns and Apply without converting the saved intervals to Manual.
+    $numericState=@{generalDefaults=@{Refresh=1};accountDefaultPreferences=@{Local=@{Custom=@{Refresh=5}};Claude=@{Custom=@{Refresh=1}}}} | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    Initialize-AccountDefaults $numericState
+    $numericSettings=[IO.File]::ReadAllText((Join-Path $script:TestProject 'WidgetSettings.ps1'))
+    $numericSettings=$numericSettings.Replace('[Windows.Threading.Dispatcher]::PushFrame($settingsFrame)',@'
+    try {
+        if ($controls.DefaultRefresh.SelectedIndex -ne 0 -or $controls.Refresh.SelectedIndex -ne 1 -or $controls.ClaudeInterval.SelectedIndex -ne 0) {throw 'JSON integer widths restored refresh dropdowns to Manual.'}
+        & $applySettings
+        if ($script:GeneralDefaults.Refresh -ne 1 -or $script:RefreshIntervalMinutes -ne 5 -or $script:ClaudeOptions.Interval -ne 1) {throw 'Untouched Apply changed numeric refresh settings.'}
+        # One account switch changes every supported group and exposes no individual inheritance controls.
+        $controls.LocalUseDefaults.Checked=$true
+        & $updateStatus
+        if (@($defaultsBindings.Local.Values | Where-Object {-not $_.Check.Checked}).Count -or
+            @($tables.General.Controls | Where-Object {$_.Text -like 'Use General defaults:*'}).Count) {throw 'The account-wide defaults switch did not replace group switches.'}
+        $controls.LocalUseDefaults.Checked=$false
+        & $updateStatus
+        if ($controls.Refresh.SelectedIndex -ne 1) {throw 'The account-wide switch lost the saved custom refresh.'}
+        # Source export controls belong to source tabs, even with both shared sources disabled.
+        if ($controls.WritePath.Parent -ne $tables.General -or $controls.SharedClaudeWritePath.Parent -ne $tables.Claude -or
+            $controls.ReadPath.Parent -ne $tables.Shared -or $controls.SharedClaudeReadPath.Parent -ne $tables['Shared Claude']) {throw 'Export/import controls are on the wrong account tabs.'}
+        $controls.ClaudeEnabled.Checked=$true;$controls.SharedClaudeEnabled.Checked=$false
+        & $updateStatus
+        if (-not $controls.SharedClaudeWriteEnabled.Enabled) {throw 'Claude-only exporter remains locked behind shared Claude.'}
+    } finally {$dialog.Close()}
+'@)
+    Invoke-Expression $numericSettings
+    Show-WidgetSettings
+    Initialize-AccountDefaults (Get-Content -LiteralPath $script:StatePath -Raw | ConvertFrom-Json)
+    if ($script:GeneralDefaults.Refresh -ne 1 -or $script:RefreshIntervalMinutes -ne 5 -or $script:ClaudeOptions.Interval -ne 1) {throw 'Restart changed saved refresh intervals.'}
     $script:GeneralDefaults.Refresh=15
     $script:GeneralDefaults.ResetHours=10
     $script:GeneralDefaults.PrimaryAlert=12

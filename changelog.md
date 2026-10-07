@@ -2,6 +2,13 @@
 
 [Back to README](README.md)
 
+## 2.5.0 — October 7, 2026
+
+- Normalize JSON integer types before restoring refresh dropdowns, preventing saved intervals from silently selecting Manual only when Settings reopens. Verify untouched Apply and restart persistence.
+- Replace repeated account inheritance checkboxes with one top-level Use General defaults switch per account. Preserve custom overrides and earlier mixed inheritance until the switch is changed; palettes and file connections remain independent.
+- Move local JSON export controls to Codex and Claude. Keep imports on the shared tabs, and allow source-only exports and check-ins with imported accounts disabled. Preserve existing paths and source IDs.
+- Refresh the settings screenshots and add source-only sharing and simplified defaults regression coverage.
+
 ## 2.4.2 — October 4, 2026
 
 - Refresh the desktop shortcut icon with a dark dashboard tile and blue, purple and sage bars, including seven native Windows icon sizes. Add the artwork generator for future updates.

@@ -82,5 +82,16 @@ $script:Usage.secondary.resetsAt+=60;Write-SharedUsage
 if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.secondary.resetsAt -ne $script:Usage.secondary.resetsAt) {throw 'Weekly reset changes were ignored while primary was unused.'}
 Write-Output 'PASS: unused five-hour reset normalization, drift suppression, restart recovery, active-window restoration and independent weekly changes.'
 
+# Publishing stays active with the imported account disabled, without reading its file.
+$script:SharedEnabled=$false;$script:LocalEnabled=$true
+$script:Usage.primary.usedPercent=1
+$script:WriteIntervalMinutes=1;$script:NextWriteAt=[DateTimeOffset]::MinValue
+$script:ReadIntervalMinutes=1;$script:NextReadAt=[DateTimeOffset]::MinValue
+$beforeRead=$script:LastReadAt
+Invoke-SharingTick
+if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.primary.usedPercent -ne 1 -or
+    $script:LastReadAt -ne $beforeRead -or (Get-SharingStatus Write) -like '*off*') {throw 'Source-only Codex publishing depends on the shared account.'}
+Write-Output 'PASS: source-only publishing works with the imported account disabled.'
+
 # Report temporary artifacts without adding account readings to the checkout.
 Write-Output ('Temporary test files: ' + $folder)

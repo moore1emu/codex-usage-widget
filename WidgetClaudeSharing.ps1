@@ -75,7 +75,7 @@ function Invoke-ClaudeFileContext {
         SuppressSharingDisplay=$true
         SharedEnabled=$options.Enabled
         WriteUsageEnabled=$options.WriteEnabled
-        ReadUsageEnabled=$options.ReadEnabled
+        ReadUsageEnabled=($options.Enabled -and $options.ReadEnabled)
         UsageOutputPath=$options.OutputPath
         UsageInputPath=$options.InputPath
         SharingSourceId=$options.SourceId
@@ -107,7 +107,7 @@ function Invoke-ClaudeFileContext {
 function Invoke-ClaudeSharing {
     param([switch]$Force,[switch]$Fresh)
     # Manual connections run only on explicit refresh; automatic files share a lightweight timer.
-    if (-not $script:SharedClaudeOptions.Enabled) {return}
+    if (-not $script:SharedClaudeOptions.Enabled -and -not ($script:ClaudeOptions.Enabled -and $script:SharedClaudeOptions.WriteEnabled)) {return}
     $options=$script:SharedClaudeOptions
     Invoke-ClaudeFileContext {
         if ($Force -or ($Fresh -and $options.ReadInterval -eq -1)) {Read-SharedUsage}
@@ -128,7 +128,7 @@ function Update-ClaudeSharingTimer {
         $script:ClaudeSharingTimer.Add_Tick({Invoke-ClaudeSharing;Update-Display;Update-TrayIcon})
     }
     $script:ClaudeSharingTimer.Stop()
-    if ($script:SharedClaudeOptions.Enabled) {
+    if ($script:SharedClaudeOptions.Enabled -or ($script:ClaudeOptions.Enabled -and $script:SharedClaudeOptions.WriteEnabled)) {
         [void][IO.Directory]::CreateDirectory((Join-Path $script:StateDirectory 'ClaudeSharing'))
         # Match remote-only reads to Claude's chosen cadence even if local Claude is turned off.
         if ($script:SharedClaudeOptions.ReadInterval -eq -1) {
@@ -137,7 +137,7 @@ function Update-ClaudeSharingTimer {
         # Manual-only and disabled file connections do not need a background timer.
         $readMinutes=if ($script:SharedClaudeOptions.ReadInterval -eq -1) {$script:ClaudeOptions.Interval} else {$script:SharedClaudeOptions.ReadInterval}
         $writeMinutes=if ($script:SharedClaudeOptions.WriteInterval -eq -1) {$script:ClaudeOptions.Interval} else {$script:SharedClaudeOptions.WriteInterval}
-        if (($script:SharedClaudeOptions.ReadEnabled -and $readMinutes -gt 0) -or ($script:SharedClaudeOptions.WriteEnabled -and $script:ClaudeOptions.Enabled -and $writeMinutes -gt 0)) {$script:ClaudeSharingTimer.Start()}
+        if (($script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled -and $readMinutes -gt 0) -or ($script:SharedClaudeOptions.WriteEnabled -and $script:ClaudeOptions.Enabled -and $writeMinutes -gt 0)) {$script:ClaudeSharingTimer.Start()}
         Invoke-ClaudeSharing -Force
     }
 }

@@ -127,7 +127,7 @@ function Write-SharedUsage {
     # Turning off local Codex also stops publishing an increasingly stale local reading.
     if ($script:LocalEnabled -eq $false) { return }
     # A file timer may publish the latest reading, but must never change its original age.
-    if (-not $script:SharedEnabled -or -not $script:WriteUsageEnabled -or -not $script:Usage -or $script:RefreshError) { return }
+    if (-not $script:WriteUsageEnabled -or -not $script:Usage -or $script:RefreshError) { return }
     $temporary = $null
     try {
         $target = Resolve-UsageFilePath $script:UsageOutputPath
@@ -156,7 +156,7 @@ function Write-SharedUsage {
                 if ($existing.checkInMinutes -eq 30 -and $usageKey -eq $script:PublishedUsageKey -and $metadataKey -eq $script:PublishedMetadataKey -and ($now-$script:LastWrittenAt).TotalMinutes -lt 30) { $script:WriteError=$null; return }
             }
         }
-        if ($script:ReadUsageEnabled -and $target -eq (Resolve-UsageFilePath $script:UsageInputPath)) { throw 'Input and output must be different files.' }
+        if ($script:SharedEnabled -and $script:ReadUsageEnabled -and $target -eq (Resolve-UsageFilePath $script:UsageInputPath)) { throw 'Input and output must be different files.' }
         # Require the selected directory to exist; the widget does not create arbitrary folders.
         $directory = [IO.Path]::GetDirectoryName($target)
         if (-not [IO.Directory]::Exists($directory)) { throw 'The output folder is unavailable.' }
@@ -240,7 +240,9 @@ function Get-SharingStatus {
         return "$script:RemoteDisplayName · last usage change $changed · last checked $ageText ago" + $(if ($age -gt $limit) { ' · stale' } else { '' })
     }
     $enabled = if ($Kind -eq 'Write') { $script:WriteUsageEnabled } else { $script:ReadUsageEnabled }
-    if (-not $script:SharedEnabled -or -not $enabled) { return "$Kind is off" }
+    # Publishing follows its source switch; only importing depends on Shared being enabled.
+    $sourceEnabled=if ($Kind -eq 'Write') {$script:LocalEnabled -ne $false} else {$script:SharedEnabled}
+    if (-not $sourceEnabled -or -not $enabled) { return "$Kind is off" }
     $errorText = if ($Kind -eq 'Write') { $script:WriteError } else { $script:ReadError }
     if ($errorText) { return "$Kind`: $errorText" }
     $last = if ($Kind -eq 'Write') { $script:LastWrittenAt } else { $script:LastReadAt }
@@ -251,7 +253,7 @@ function Get-SharingStatus {
 
 function Invoke-SharingTick {
     # Check independent file timers even while the desktop window is minimized to the tray.
-    if (-not $script:SharedEnabled) { return }
+    if (-not $script:SharedEnabled -and -not $script:WriteUsageEnabled) { return }
     $now = [DateTimeOffset]::Now
     $scheduledWrite = $script:WriteIntervalMinutes -gt 0 -and $now -ge $script:NextWriteAt
     # Keep a 30-minute check-in between scheduled writes while preserving explicit manual-only choices.
@@ -261,7 +263,7 @@ function Invoke-SharingTick {
         Write-SharedUsage
         if ($scheduledWrite) { $script:NextWriteAt = $now.AddMinutes($script:WriteIntervalMinutes) }
     }
-    if ($script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0 -and $now -ge $script:NextReadAt) {
+    if ($script:SharedEnabled -and $script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0 -and $now -ge $script:NextReadAt) {
         Read-SharedUsage
         $script:NextReadAt = $now.AddMinutes($script:ReadIntervalMinutes)
         if (-not $script:SuppressSharingDisplay -and ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible))) { Update-Display }

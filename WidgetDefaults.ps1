@@ -37,7 +37,10 @@ function Initialize-AccountDefaults {
     param($State)
     # Migrate existing installations with inheritance off, preserving their current account choices.
     foreach ($key in @($script:GeneralDefaults.Keys)) {
-        if (Test-DefaultPreference $key $State.generalDefaults.$key) { $script:GeneralDefaults[$key]=$State.generalDefaults.$key }
+        if (Test-DefaultPreference $key $State.generalDefaults.$key) {
+            # JSON integers are Int64; normalize numeric choices before dropdown lookup.
+            $script:GeneralDefaults[$key]=if ($key -in @('Refresh','ResetHours','PrimaryAlert','SecondaryAlert')) {[int]$State.generalDefaults.$key} else {$State.generalDefaults.$key}
+        }
     }
     foreach ($account in $script:AccountDefaultTargets.Keys) {
         $script:AccountCustomSettings[$account]=@{}
@@ -46,7 +49,7 @@ function Initialize-AccountDefaults {
             $value=Get-AccountDefaultTarget $account $key
             $saved=$State.accountDefaultPreferences.$account.Custom.$key
             if (Test-DefaultPreference $key $saved -AllowMatchedRefresh:($account -in @('Remote','SharedClaude'))) { $value=$saved }
-            $script:AccountCustomSettings[$account][$key]=$value
+            $script:AccountCustomSettings[$account][$key]=if ($key -in @('Refresh','ResetHours','PrimaryAlert','SecondaryAlert')) {[int]$value} else {$value}
         }
         foreach ($group in $script:AccountDefaultGroups.Keys) {
             $saved=$State.accountDefaultPreferences.$account.Use.$group
@@ -89,6 +92,8 @@ function Get-DefaultControlValue {
 
 function Set-DefaultControlValue {
     param($Control,$Values,$Value)
+    # Normalize restored JSON numbers to match the native dropdown option types.
+    if ($Value -is [long]) { $Value=[int]$Value }
     # Reuse native controls when previewing inherited defaults or restoring an override.
     if ($Control -is [Windows.Forms.ComboBox]) { $Control.SelectedIndex=[array]::IndexOf($Values,$Value) }
     elseif ($Control -is [Windows.Forms.CheckBox]) { $Control.Checked=[bool]$Value }
@@ -109,7 +114,7 @@ function Add-GeneralDefaultsControls {
         $Controls['Default'+$key]=$control
         if ($control -is [Windows.Forms.CheckBox]) {$control.Text=$label;Add-SettingsRow $Tables.Defaults '' $control}
         else {Add-SettingsRow $Tables.Defaults $label $control}
-        Set-SettingsHelp $ToolTip $control 'Used only by accounts whose matching Use General defaults switch is checked. Colors and connection paths stay independent.'
+        Set-SettingsHelp $ToolTip $control 'Used by accounts whose top Use General defaults switch is checked. Colors and connection paths stay independent.'
     }
     # Connect each account group to its existing control keys, keeping all provider logic intact.
     $maps=@{
@@ -133,15 +138,31 @@ function Add-GeneralDefaultsControls {
                 $entry.Custom[$key]=$script:AccountCustomSettings[$account][$key]
                 Set-DefaultControlValue $control $options $entry.Custom[$key]
             }
-            # Insert each inheritance switch immediately above the first setting it controls.
-            $table=$Tables[$maps[$account].Table]
-            $first=$entry.Items[$script:AccountDefaultGroups[$group][0]].Control
-            $row=$table.GetRow($first)
-            foreach ($control in @($table.Controls)) {if ($table.GetRow($control) -ge $row) {$table.SetRow($control,$table.GetRow($control)+1)}}
-            $table.RowCount++;$table.RowStyles.Insert($row,[Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::AutoSize));$table.Controls.Add($check,1,$row);$table.SetColumnSpan($check,2)
-            Set-SettingsHelp $ToolTip $check 'Use General defaults for this group. Uncheck to restore your saved custom values. Changes take effect on Apply or Save.'
+            # Keep legacy group flags internally so existing partial inheritance migrates safely.
+            # One visible account switch replaces the repeated group controls.
+            $check.Visible=$false
             $bindings[$account][$group]=$entry
         }
+        # Insert the single defaults switch just below the account's enable switch.
+        $master=[Windows.Forms.CheckBox]::new()
+        $master.Text='Use General defaults';$master.AutoSize=$true
+        $master.Tag=@{Entries=$bindings[$account];Updating=$false}
+        $inherited=@($bindings[$account].Values | Where-Object {$_.Check.Checked}).Count
+        $master.CheckState=if ($inherited -eq $bindings[$account].Count) {'Checked'} elseif ($inherited -eq 0) {'Unchecked'} else {'Indeterminate'}
+        $master.Add_CheckedChanged({
+            param($sender,$eventArgs)
+            if ($sender.Tag.Updating) {return}
+            # Apply this single choice to every supported setting group while retaining custom values.
+            $sender.Tag.Updating=$true
+            try {foreach ($entry in $sender.Tag.Entries.Values) {$entry.Check.Checked=$sender.Checked}}
+            finally {$sender.Tag.Updating=$false}
+        })
+        $Controls[$account+'UseDefaults']=$master
+        $table=$Tables[$maps[$account].Table]
+        foreach ($control in @($table.Controls)) {if ($table.GetRow($control) -ge 1) {$table.SetRow($control,$table.GetRow($control)+1)}}
+        $table.RowCount++;$table.RowStyles.Insert(1,[Windows.Forms.RowStyle]::new([Windows.Forms.SizeType]::AutoSize))
+        $table.Controls.Add($master,1,1);$table.SetColumnSpan($master,2)
+        Set-SettingsHelp $ToolTip $master 'Use General refresh, reset details, notifications and Codex credit defaults for this account. Uncheck to restore manual settings. Colors and JSON connections remain independent. A mixed mark preserves earlier partial inheritance until you change this switch.'
     }
     return $bindings
 }
@@ -150,7 +171,7 @@ function Update-DefaultsControls {
     param($Controls,$Bindings)
     # Match the existing master locks and never alter a native dropdown while it is open.
     foreach ($account in $Bindings.Keys) {
-        $enabled=switch ($account) {Local {$true} Remote {$Controls.SharedEnabled.Checked} Claude {$Controls.ClaudeEnabled.Checked} SharedClaude {$Controls.SharedClaudeEnabled.Checked}}
+        $enabled=switch ($account) {Local {$Controls.LocalEnabled.Checked} Remote {$Controls.SharedEnabled.Checked} Claude {$Controls.ClaudeEnabled.Checked} SharedClaude {$Controls.SharedClaudeEnabled.Checked}}
         foreach ($group in $Bindings[$account].Keys) {
             $entry=$Bindings[$account][$group];$inherit=$entry.Check.Checked
             $entry.Check.Enabled=$enabled
@@ -169,6 +190,15 @@ function Update-DefaultsControls {
                 $item.Control.Enabled=$groupEnabled -and -not $inherit
             }
             $entry.Previous=$inherit
+        }
+        # Reflect migrated partial choices without generating another round of checkbox events.
+        $master=$Controls[$account+'UseDefaults']
+        $master.Enabled=$enabled
+        if (-not $master.Tag.Updating) {
+            $inherited=@($Bindings[$account].Values | Where-Object {$_.Check.Checked}).Count
+            $state=if ($inherited -eq $Bindings[$account].Count) {'Checked'} elseif ($inherited -eq 0) {'Unchecked'} else {'Indeterminate'}
+            $master.Tag.Updating=$true
+            try {$master.CheckState=$state} finally {$master.Tag.Updating=$false}
         }
     }
 }
