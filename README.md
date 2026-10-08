@@ -4,7 +4,7 @@
 
 A small Windows desktop and tray widget for **Codex and Claude subscription usage left**, reset times, credits where available, and notifications. Show local accounts and accounts from another computer through private shared JSON files.
 
-**Version 2.5.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.5.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -49,7 +49,7 @@ Right-click the tray icon → **Settings...**. **General** holds window/startup 
 
 </details>
 
-For two accounts, choose a private synced folder outside this project. Each computer writes its own file from its **Codex** or **Claude** source tab and reads the other’s from **Shared Codex** or **Shared Claude**. Exporting works with the shared account disabled; enable shared accounts only to import readings. Choose **Side by side**, **Stacked**, **Account picker**, or **Separate windows**; Side by side keeps two numeric columns at Mini size. Separate windows remember independent sizes and positions; use the tray menu to reopen either account. File checks can match the widget or use separate timers. Exports change only when usage or account details change, with an automatic check-in at least every 30 minutes. [Setup instructions](extradetails.md#two-computers-and-file-sharing).
+For two accounts, choose a private synced folder outside this project. Each computer writes its own file from its **Codex** or **Claude** source tab and reads the other’s from **Shared Codex** or **Shared Claude**. Exporting works with the shared account disabled; enable shared accounts only to import readings. Choose **Side by side**, **Stacked**, **Account picker**, or **Separate windows**; Side by side keeps two numeric columns at Mini size. Separate windows remember independent sizes and positions; use the tray menu to reopen either account. File checks can match the widget or use separate timers. Exports change only when usage or account details change, with an automatic check-in at least every 30 minutes. While five-hour usage remaining is 100%, both reset-time changes are ignored in exports until usage begins. [Setup instructions](extradetails.md#two-computers-and-file-sharing).
 
 For Claude, enable it in **Settings → Claude**, click **Apply**, then **Connect / open Claude Usage** and sign in on Claude’s website. An optional Microsoft WebView2 browser profile stays private on this computer. Developer API token usage and spending are not included. [Claude setup and limitations](extradetails.md#claude-subscriptions).
 

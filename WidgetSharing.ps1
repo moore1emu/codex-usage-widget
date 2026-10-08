@@ -113,9 +113,13 @@ function Get-SharedUsageKey {
     param($Snapshot)
     # Use stable field ordering and exclude fetchedAt, which changes on every successful check.
     $values = [ordered]@{planType=$Snapshot.planType;ordinaryUsageAllowed=$Snapshot.ordinaryUsageAllowed}
+    # A full five-hour allowance makes both reset timestamps irrelevant to publication changes.
+    $idle = $Snapshot.primary -and $null -ne $Snapshot.primary.usedPercent -and $Snapshot.primary.usedPercent -eq 0
     foreach ($name in @('primary','secondary')) {
         $quota = $Snapshot.$name
-        $values[$name] = if ($null -eq $quota) { $null } else { [ordered]@{usedPercent=$quota.usedPercent;resetsAt=$quota.resetsAt;windowDurationMins=$quota.windowDurationMins} }
+        # Keep comparing percentages and durations while ignoring reset-only drift until usage begins.
+        $reset = if ($idle) { 0 } else { $quota.resetsAt }
+        $values[$name] = if ($null -eq $quota) { $null } else { [ordered]@{usedPercent=$quota.usedPercent;resetsAt=$reset;windowDurationMins=$quota.windowDurationMins} }
     }
     $credits = $Snapshot.credits
     $values.credits = if ($null -eq $credits) { $null } else { [ordered]@{balance=$credits.balance;hasCredits=$credits.hasCredits;unlimited=$credits.unlimited} }
@@ -154,6 +158,12 @@ function Write-SharedUsage {
                 $script:PublishedTarget = $target
                 $script:PublishedCheckInReady = $existing.checkInMinutes -eq 30
                 if ($existing.checkInMinutes -eq 30 -and $usageKey -eq $script:PublishedUsageKey -and $metadataKey -eq $script:PublishedMetadataKey -and ($now-$script:LastWrittenAt).TotalMinutes -lt 30) { $script:WriteError=$null; return }
+            }
+            # Preserve the published weekly date during idle check-ins and independent credit/usage changes.
+            if ($snapshot.primary -and $null -ne $snapshot.primary.usedPercent -and $snapshot.primary.usedPercent -eq 0 -and
+                $snapshot.secondary -and $existing.usage.secondary) {
+                $previous = ConvertTo-SharedUsage $existing.usage
+                $snapshot.secondary.resetsAt = $previous.secondary.resetsAt
             }
         }
         if ($script:SharedEnabled -and $script:ReadUsageEnabled -and $target -eq (Resolve-UsageFilePath $script:UsageInputPath)) { throw 'Input and output must be different files.' }

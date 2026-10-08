@@ -73,14 +73,37 @@ if ([IO.File]::ReadAllText($script:UsageOutputPath) -ne $idleExport) {throw 'Dri
 $script:PublishedTarget='';$script:PublishedUsageKey=$null;$script:LastWrittenAt=$null
 Write-SharedUsage
 if ([IO.File]::ReadAllText($script:UsageOutputPath) -ne $idleExport) {throw 'Unused reset drift rewrote the export after restart.'}
-# The first real usage restores the reported reset; weekly changes still publish while idle.
+# The first real usage restores both reported resets; idle weekly drift cannot trigger writes.
 $script:Usage.primary.usedPercent=0.1
 Write-SharedUsage
 if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.primary.resetsAt -ne $now+11000) {throw 'Active five-hour reset was not restored.'}
 $script:Usage.primary.usedPercent=0;Write-SharedUsage
+$idleExport=[IO.File]::ReadAllText($script:UsageOutputPath)
+$idleWeekly=($idleExport | ConvertFrom-Json).usage.secondary.resetsAt
 $script:Usage.secondary.resetsAt+=60;Write-SharedUsage
-if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.secondary.resetsAt -ne $script:Usage.secondary.resetsAt) {throw 'Weekly reset changes were ignored while primary was unused.'}
-Write-Output 'PASS: unused five-hour reset normalization, drift suppression, restart recovery, active-window restoration and independent weekly changes.'
+if ([IO.File]::ReadAllText($script:UsageOutputPath) -ne $idleExport) {throw 'Idle weekly reset drift rewrote the export.'}
+# Recover the same idle comparison after a restart without recording either drifting reset.
+$script:PublishedTarget='';$script:PublishedUsageKey=$null;$script:LastWrittenAt=$null
+Write-SharedUsage -Force
+if ([IO.File]::ReadAllText($script:UsageOutputPath) -ne $idleExport) {throw 'Restart recorded idle weekly reset drift.'}
+# A 30-minute check-in retains the weekly date and genuine last usage-change time.
+$idleChanged=($idleExport | ConvertFrom-Json).usageChangedAt
+$script:LastWrittenAt=[DateTimeOffset]::Now.AddMinutes(-31)
+Write-SharedUsage
+$idleCheckIn=Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json
+if ($idleCheckIn.usage.secondary.resetsAt -ne $idleWeekly -or $idleCheckIn.usageChangedAt -ne $idleChanged -or
+    ([DateTimeOffset]::Now-$script:LastWrittenAt).TotalMinutes -gt 1) {throw 'Idle check-in recorded reset drift or missed publication.'}
+# Credit and weekly percentage changes still publish while both reset dates remain stable.
+$script:Usage.credits.balance='49.25';$script:Usage.secondary.usedPercent=41
+Write-SharedUsage
+$independent=Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json
+if ($independent.usage.credits.balance -ne '49.25' -or $independent.usage.secondary.usedPercent -ne 41 -or
+    $independent.usage.secondary.resetsAt -ne $idleWeekly) {throw 'Idle reset suppression blocked real credit or weekly usage changes.'}
+# Starting five-hour usage resumes publication of the latest actual weekly reset date.
+$script:Usage.primary.usedPercent=0.1
+Write-SharedUsage
+if ((Get-Content $script:UsageOutputPath -Raw | ConvertFrom-Json).usage.secondary.resetsAt -ne $script:Usage.secondary.resetsAt) {throw 'Active weekly reset was not restored.'}
+Write-Output 'PASS: idle suppression of both reset timestamps, restart/check-in retention, independent credit/weekly usage changes and active-window restoration.'
 
 # Publishing stays active with the imported account disabled, without reading its file.
 $script:SharedEnabled=$false;$script:LocalEnabled=$true

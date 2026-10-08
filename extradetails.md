@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.5.0.
+This guide covers AI Usage Widget 2.5.1.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
@@ -125,7 +125,7 @@ Sharing is opt-in: outgoing Codex files are configured under **Settings... → C
 | Output | `account-a.json` | `account-b.json` |
 | Input | `account-b.json` | `account-a.json` |
 
-Writing uses an atomic file replacement. Unchanged readings do not rewrite the export, even after a fresh usage check or manual refresh. Usage values, credits, resets, and account metadata changes are published at the selected write cadence. Automatic sharing checks in after 30 minutes without changes; explicit Manual only remains manual. The JSON records last usage change separately from the reading's actual check time. Unchanged shared files are checked by file metadata without reparsing. Existing output files must belong to this widget's saved random source identifier; unrelated files and another computer's exports are not overwritten. Keep the local preferences file when updating the widget so its identifier and connections remain intact. After deleting local preferences, choose a new output filename rather than trying to claim an old export.
+Writing uses an atomic file replacement. Unchanged readings do not rewrite the export, even after a fresh usage check or manual refresh. Usage values, credits, and account metadata changes are published at the selected write cadence. While five-hour usage remaining is 100%, changes to both reset timestamps are ignored: the five-hour reset stays unset and the last published weekly date is retained, including during check-ins and after restart. Current reset dates resume once five-hour usage begins. Automatic sharing checks in after 30 minutes without changes; explicit Manual only remains manual. The JSON records last usage change separately from the reading's actual check time. Unchanged shared files are checked by file metadata without reparsing. Existing output files must belong to this widget's saved random source identifier; unrelated files and another computer's exports are not overwritten. Keep the local preferences file when updating the widget so its identifier and connections remain intact. After deleting local preferences, choose a new output filename rather than trying to claim an old export.
 
 **Write frequency** and **Read frequency** each offer Match widget refresh, 1/5/15/30 minutes, or Manual only. Matched reads run when a local refresh starts; matched writes follow a successful local refresh. Separate write timers publish the latest existing reading, without making extra Codex requests or changing its original update time. Manual Refresh reads immediately and publishes when the local request succeeds. Saving an enabled connection performs an initial read/write if data is available. Independent file timers continue while minimized to the tray; disabled and manual connections add no idle file polling. Automatic matched writers keep a lightweight timer for the 30-minute check-in.
 

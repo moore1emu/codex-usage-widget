@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.5.1 — October 8, 2026
+
+- Ignore both five-hour and weekly reset timestamp changes in shared JSON while five-hour usage remaining is 100%. Keep the last published weekly reset date through restarts and 30-minute check-ins; resume current reset dates when usage begins.
+- Continue publishing actual percentage, credit and account-setting changes while idle. Apply the same rules to Codex and Claude exports, with regression checks for restart recovery, check-ins and independent source state.
+
 ## 2.5.0 — October 7, 2026
 
 - Normalize JSON integer types before restoring refresh dropdowns, preventing saved intervals from silently selecting Manual only when Settings reopens. Verify untouched Apply and restart persistence.

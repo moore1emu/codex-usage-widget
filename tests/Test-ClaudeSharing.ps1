@@ -28,6 +28,28 @@ $stamp=[IO.File]::GetLastWriteTimeUtc($script:SharedClaudeOptions.OutputPath)
 $script:ClaudeUsage.fetchedAt++
 Invoke-ClaudeSharing -Force
 if ([IO.File]::GetLastWriteTimeUtc($script:SharedClaudeOptions.OutputPath) -ne $stamp) {throw 'An unchanged Claude poll rewrote shared JSON.'}
+# Claude uses the same idle rules without changing Codex's independent publication state.
+$script:ClaudeUsage.primary.usedPercent=0
+Invoke-ClaudeSharing -Fresh
+$idle=[IO.File]::ReadAllText($script:SharedClaudeOptions.OutputPath)
+$script:ClaudeUsage.primary.resetsAt+=60;$script:ClaudeUsage.secondary.resetsAt--
+$script:ClaudeUsage.fetchedAt++
+Invoke-ClaudeSharing -Fresh
+if ([IO.File]::ReadAllText($script:SharedClaudeOptions.OutputPath) -ne $idle) {throw 'Idle Claude reset drift rewrote the export.'}
+# Restarts and scheduled check-ins must keep Claude's last published weekly reset.
+$script:ClaudeFileState.PublishedTarget='';$script:ClaudeFileState.PublishedUsageKey=$null;$script:ClaudeFileState.LastWrittenAt=$null
+Invoke-ClaudeSharing -Force
+if ([IO.File]::ReadAllText($script:SharedClaudeOptions.OutputPath) -ne $idle) {throw 'Claude restart recorded idle reset drift.'}
+$script:ClaudeFileState.LastWrittenAt=[DateTimeOffset]::Now.AddMinutes(-31)
+Invoke-ClaudeSharing
+$checked=Get-Content -LiteralPath $script:SharedClaudeOptions.OutputPath -Raw | ConvertFrom-Json
+$prior=$idle | ConvertFrom-Json
+if ($checked.usage.secondary.resetsAt -ne $prior.usage.secondary.resetsAt -or $checked.usageChangedAt -ne $prior.usageChangedAt) {throw 'Claude check-in recorded idle reset drift.'}
+# The first activity restores current reset dates through the normal fresh-reading path.
+$script:ClaudeUsage.primary.usedPercent=40
+Invoke-ClaudeSharing -Fresh
+$published=Get-Content -LiteralPath $script:SharedClaudeOptions.OutputPath -Raw | ConvertFrom-Json
+if ($published.usage.secondary.resetsAt -ne $script:ClaudeUsage.secondary.resetsAt -or $script:Usage.primary.usedPercent -ne 19) {throw 'Claude active resets or Codex context isolation failed.'}
 # Import a distinct computer's Claude file and use its display name.
 $script:SharedClaudeOptions.Enabled=$true
 $script:SharedClaudeOptions.ReadEnabled=$true
