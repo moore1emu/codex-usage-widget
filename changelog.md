@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.6.4 — October 11, 2026
+
+- Keep usage bars visible at narrower widths by adding a compact labeled view with 13px labels/values and percentages without the redundant left suffix. Restore normal text and type size when widened; keep connected accounts aligned.
+
 ## 2.6.3 — October 11, 2026
 
 - Match live tray and window icons to the desktop icon's upright blue, purple and sage bars. Preserve dynamic quota heights, the visible outline at zero usage and credit visibility rules.

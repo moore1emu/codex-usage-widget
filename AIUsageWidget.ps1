@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.6.3'
+$script:WidgetVersion = '2.6.4'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -991,11 +991,16 @@ function Update-ResponsiveLayout {
     $compactSecondaryCaption.Visibility='Collapsed'
     # Restore visibility before measurement so resizing upward is deterministic.
     foreach ($control in @($primaryArea, $secondaryArea, $creditsArea, $primaryReset, $secondaryReset)) { $control.Visibility = 'Visible' }
-    # Keep concise labels and consume the center gap before reducing numeric type size.
-    foreach ($density in @('Full','ShortLabels','SmallType')) {
+    # Keep bars in a narrow labeled view before falling back to the numeric badge.
+    $primaryValue = $primaryPercent.Text -replace '\s+left$', ''
+    $secondaryValue = $secondaryPercent.Text -replace '\s+left$', ''
+    foreach ($density in @('Full','ShortLabels','SmallType','NarrowBars')) {
         $primaryLabel.Text = '5-hour'
         $secondaryLabel.Text = 'Weekly'
-        $primaryPercent.FontSize = if ($density -eq 'SmallType') { 15 } else { 18 }
+        # Drop redundant "left" text and reduce both labels and numbers only at the narrowest bar size.
+        $primaryPercent.Text = if ($density -eq 'NarrowBars' -or $primaryValue -notmatch '%$') { $primaryValue } else { $primaryValue + ' left' }
+        $secondaryPercent.Text = if ($density -eq 'NarrowBars' -or $secondaryValue -notmatch '%$') { $secondaryValue } else { $secondaryValue + ' left' }
+        $primaryPercent.FontSize = if ($density -eq 'NarrowBars') { 13 } elseif ($density -eq 'SmallType') { 15 } else { 18 }
         $secondaryPercent.FontSize = $primaryPercent.FontSize
         $creditsText.FontSize = $primaryPercent.FontSize
         # Match each white label to its value before measuring the row's required width.
