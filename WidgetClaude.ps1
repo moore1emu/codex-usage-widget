@@ -423,7 +423,8 @@ function Update-ClaudeWindow {
     $width=[Math]::Max(1,$peer.ActualWidth-14); $height=[Math]::Max(1,$peer.ActualHeight-14-$(if ($toolbar) {24} else {0}))
     $card=$script:AccountCards.Claude; $card.Container.Visibility='Visible'
     $heading=Set-AccountHeadingSize $card $width $height
-    Render-AccountCard -Claude -Card $card -Snapshot $script:ClaudeUsage -Name $script:ClaudeOptions.Name -Status $script:ClaudeStatus -Scheme $script:ClaudeOptions.Scheme -Width $width -Height ([Math]::Max(1,$height-$heading))
+    # Use the same fixed header allowance as connected account cards for stable bar fitting.
+    Render-AccountCard -BarHeight ([Math]::Max(1,$peer.ActualHeight-14-24-29)) -Claude -Card $card -Snapshot $script:ClaudeUsage -Name $script:ClaudeOptions.Name -Status $script:ClaudeStatus -Scheme $script:ClaudeOptions.Scheme -Width $width -Height ([Math]::Max(1,$height-$heading))
     Invoke-ClaudeWindowAction {Update-PinDisplay;Update-HoverControls}
 }
 

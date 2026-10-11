@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.6.6 — October 11, 2026
+
+- Keep reset details first while making usage-bar visibility stable during corner resizing. Use full wrapped reset text and a consistent header allowance for bar fitting so optional header/status changes and expanding reset schedules cannot make bars disappear and return unexpectedly.
+- Keep narrow labeled rows before the numeric badge, and let longer wrapped details hide bars earlier in narrow, short views. Cover stacked/side-by-side width and height sweeps and repeated renders with regression tests.
+
 ## 2.6.5 — October 11, 2026
 
 - Stop reserving an unused toolbar strip inside account cards when deciding whether usage bars fit. Prevent bars from disappearing in a wider stacked view and returning only after narrowing hides optional header details.

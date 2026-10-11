@@ -254,7 +254,8 @@ function Update-SharedClaudeWindow {
     $width=[Math]::Max(1,$peer.ActualWidth-14); $height=[Math]::Max(1,$peer.ActualHeight-14-$(if ($toolbar) {24} else {0}))
     $card=$script:AccountCards.SharedClaude; $card.Container.Visibility='Visible'
     $heading=Set-AccountHeadingSize $card $width $height
-    Render-AccountCard -SharedClaude -Card $card -Snapshot $script:SharedClaudeUsage -Name $script:SharedClaudeOptions.Name -Status $script:SharedClaudeStatus -Scheme $script:SharedClaudeOptions.Scheme -Width $width -Height ([Math]::Max(1,$height-$heading))
+    # Keep shared Claude bars stable when optional header controls appear or disappear.
+    Render-AccountCard -BarHeight ([Math]::Max(1,$peer.ActualHeight-14-24-29)) -SharedClaude -Card $card -Snapshot $script:SharedClaudeUsage -Name $script:SharedClaudeOptions.Name -Status $script:SharedClaudeStatus -Scheme $script:SharedClaudeOptions.Scheme -Width $width -Height ([Math]::Max(1,$height-$heading))
     Invoke-SharedClaudeWindowAction {Update-PinDisplay;Update-HoverControls}
 }
 

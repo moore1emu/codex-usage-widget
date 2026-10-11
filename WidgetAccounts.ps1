@@ -120,7 +120,7 @@ function Set-AccountHeadingSize {
 }
 
 function Render-AccountCard {
-    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote, [switch] $Claude, [switch] $SharedClaude, [switch] $ReserveCreditRow, [hashtable] $SharedLayout, [switch] $ProbeLayout)
+    param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [double] $BarHeight = -1, [switch] $Remote, [switch] $Claude, [switch] $SharedClaude, [switch] $ReserveCreditRow, [hashtable] $SharedLayout, [switch] $ProbeLayout)
     # Evaluate both imported providers on every render, including cached-file and countdown ticks.
     $reading=$null
     if ($Remote -or $SharedClaude) {
@@ -135,11 +135,17 @@ function Render-AccountCard {
     $Card.AgeNotice.VerticalAlignment=if ($reading.Expired) {'Center'} else {'Bottom'}
     # Wrap the age message in narrow expired cards when enough vertical space remains.
     $Card.AgeNotice.TextWrapping=if ($reading.Expired -and $Height -ge 30) {'Wrap'} else {'NoWrap'}
-    if ($reading.Stale -and -not $reading.Expired) { $Height=[Math]::Max(1,$Height-14) }
+    # Use a fixed header budget for bars so hiding optional chrome cannot bring them back.
+    if ($BarHeight -lt 0) { $BarHeight = $Height }
+    # Reserve the stale notice once in both the text layout and the independent bar budget.
+    if ($reading.Stale -and -not $reading.Expired) {
+        $Height=[Math]::Max(1,$Height-14)
+        $BarHeight=[Math]::Max(1,$BarHeight-14)
+    }
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
-    $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; Topmost=$true }
-    $original = @{ SharedAccountLayout=$script:SharedAccountLayout; ProbingAccountLayout=$script:ProbingAccountLayout; RenderingAccountName=$script:RenderingAccountName; ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
+    $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; BarHeight=$BarHeight; Topmost=$true }
+    $original = @{ FullResetHeight=$script:FullResetHeight; SharedAccountLayout=$script:SharedAccountLayout; ProbingAccountLayout=$script:ProbingAccountLayout; RenderingAccountName=$script:RenderingAccountName; ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
         $script:RenderingAccountCard = $true
@@ -296,7 +302,11 @@ function Update-AccountViews {
             $provider = switch ($key) { Local {'Codex'} Remote {'Shared Codex'} Claude {'Claude'} SharedClaude {'Shared Claude'} }
             $status = $provider + ' · ' + $status
             $plan=if ($snapshot.planType) {([string]$snapshot.planType).ToUpperInvariant()+' · '} else {''}
-            Render-AccountCard -SharedLayout $sharedLayout -ProbeLayout:($pass -eq 'Measure') -ReserveCreditRow:$reserveCredits -Remote:($key -eq 'Remote') -Claude:($key -eq 'Claude') -SharedClaude:($key -eq 'SharedClaude') -Card $card -Snapshot $snapshot -Name (Get-AccountName $key) -Status ($plan+$status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight-$heading))
+            # Count toolbar, picker and full account heading consistently across every width.
+            $barHostHeight=$window.ActualHeight-$hostPadding-24-$(if ($picker) {29} else {0})
+            $barCardHeight=if ($script:AccountLayout -in @('Stacked','Separate windows')) {($barHostHeight-($keys.Count-1))/$keys.Count} else {$barHostHeight}
+            # Keep detached bar fitting independent of whether its toolbar/status line is visible.
+    Render-AccountCard -BarHeight ([Math]::Max(1,$barCardHeight-29)) -SharedLayout $sharedLayout -ProbeLayout:($pass -eq 'Measure') -ReserveCreditRow:$reserveCredits -Remote:($key -eq 'Remote') -Claude:($key -eq 'Claude') -SharedClaude:($key -eq 'SharedClaude') -Card $card -Snapshot $snapshot -Name (Get-AccountName $key) -Status ($plan+$status) -Scheme $scheme -Width $cardWidth -Height ([Math]::Max(1,$cardHeight-$heading))
         }
     }
     # With no attached account, Settings and the tray remain available to re-enable sources.
@@ -549,7 +559,8 @@ function Update-SeparateWindow {
     $headingHeight = Set-AccountHeadingSize $card $width $height
     $status = Get-SharingStatus Source
     if ($script:ReadError) { $status = 'File unavailable · ' + $status }
-    Render-AccountCard -Remote -Card $card -Snapshot $script:RemoteUsage -Name $script:RemoteDisplayName -Status $status -Scheme $script:RemoteScheme -Width $width -Height ([Math]::Max(1,$height-$headingHeight))
+    # Keep detached bar fitting independent of whether its toolbar/status line is visible.
+    Render-AccountCard -BarHeight ([Math]::Max(1,$peer.ActualHeight-14-24-29)) -Remote -Card $card -Snapshot $script:RemoteUsage -Name $script:RemoteDisplayName -Status $status -Scheme $script:RemoteScheme -Width $width -Height ([Math]::Max(1,$height-$headingHeight))
     # Use the detached shell's hover and pin controls after the card context has been restored.
     Invoke-SeparateWindowAction { Update-PinDisplay; Update-HoverControls }
 }
