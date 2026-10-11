@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.6.2'
+$script:WidgetVersion = '2.6.3'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -183,7 +183,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
       <Grid x:Name="PrimaryArea" Grid.Row="1" Margin="0,5,0,0">
         <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="12"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" SharedSizeGroup="UsageValue"/></Grid.ColumnDefinitions>
-        <TextBlock x:Name="PrimaryLabel" Text="5-hour window" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
+        <TextBlock x:Name="PrimaryLabel" Text="5-hour" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
         <TextBlock x:Name="PrimaryPercent" Grid.Column="1" Text="—" Foreground="#78A7FF" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left"/>
         <ProgressBar x:Name="PrimaryBar" Grid.Row="1" Grid.ColumnSpan="2" Height="8" Minimum="0" Maximum="100"
                      Background="#293041" Foreground="#669CFF" BorderThickness="0" Value="0"/>
@@ -194,7 +194,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
       <Grid x:Name="SecondaryArea" Grid.Row="2" Margin="0,5,0,0">
         <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="12"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" SharedSizeGroup="UsageValue"/></Grid.ColumnDefinitions>
-        <TextBlock x:Name="SecondaryLabel" Text="Weekly window" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
+        <TextBlock x:Name="SecondaryLabel" Text="Weekly" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
         <TextBlock x:Name="SecondaryPercent" Grid.Column="1" Text="—" Foreground="#B893FF" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left"/>
         <ProgressBar x:Name="SecondaryBar" Grid.Row="1" Grid.ColumnSpan="2" Height="8" Minimum="0" Maximum="100"
                      Background="#293041" Foreground="#A97BFF" BorderThickness="0" Value="0"/>
@@ -347,22 +347,22 @@ function New-TrayUsageIcon {
         # Use the selected quota colors in the live notification icon.
         $blueBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:PrimaryColor))
         $purpleBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:SecondaryColor))
-        # Prepare the optional credit stripe and a boundary visible even at zero quota.
+        # Prepare the optional credit bar and a boundary visible even at zero quota.
         $creditBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:CreditColor))
         $outlinePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(235,245,247,251), 1)
         try {
             # Keep the dark square and outline visible even when both usage bars are empty.
             $graphics.FillRectangle($backgroundBrush, 2, 2, 28, 28)
-            # Scale each remaining percentage to the tray bar's pixel width.
-            $blueWidth = [int] [Math]::Round(28 * ([Math]::Min(100, [Math]::Max(0, $PrimaryRemaining)) / 100))
-            $purpleWidth = [int] [Math]::Round(28 * ([Math]::Min(100, [Math]::Max(0, $SecondaryRemaining)) / 100))
-            if ($blueWidth -gt 0) { $graphics.FillRectangle($blueBrush, 2, 4, $blueWidth, 6) }
-            if ($purpleWidth -gt 0) { $graphics.FillRectangle($purpleBrush, 2, 14, $purpleWidth, 6) }
+            # Match the desktop icon's upright bars, filling upward as usage remaining increases.
+            $blueHeight = [int] [Math]::Round(24 * ([Math]::Min(100, [Math]::Max(0, $PrimaryRemaining)) / 100))
+            $purpleHeight = [int] [Math]::Round(24 * ([Math]::Min(100, [Math]::Max(0, $SecondaryRemaining)) / 100))
+            if ($blueHeight -gt 0) { $graphics.FillRectangle($blueBrush, 4, (28 - $blueHeight), 6, $blueHeight) }
+            if ($purpleHeight -gt 0) { $graphics.FillRectangle($purpleBrush, 13, (28 - $purpleHeight), 6, $purpleHeight) }
             # Show the credit identity accent only for enabled positive or unlimited credits.
             $creditValue = [decimal]0
             $positiveCredits = [decimal]::TryParse([string]$script:Usage.credits.balance, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$creditValue) -and $creditValue -gt 0
             if ($script:CreditDisplayMode -ne 'Off' -and ($positiveCredits -or $script:Usage.credits.unlimited -eq $true)) {
-                $graphics.FillRectangle($creditBrush, 4, 25, 24, 3)
+                $graphics.FillRectangle($creditBrush, 22, 9, 6, 19)
             }
             $graphics.DrawRectangle($outlinePen, 1, 1, 29, 29)
         }
@@ -401,11 +401,11 @@ function New-WindowUsageIcon {
         $dividerBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 24, 29, 40))
         $creditBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($script:CreditColor))
         try {
-            # Draw three straight-edged color bands with narrow dark separators.
+            # Match the desktop artwork with blue, purple and sage upright bars.
             $graphics.FillRectangle($dividerBrush, 2, 2, 28, 28)
-            $graphics.FillRectangle($blueBrush, 2, 2, 28, 8)
-            $graphics.FillRectangle($purpleBrush, 2, 12, 28, 8)
-            $graphics.FillRectangle($creditBrush, 2, 22, 28, 8)
+            $graphics.FillRectangle($blueBrush, 4, 15, 6, 13)
+            $graphics.FillRectangle($purpleBrush, 13, 5, 6, 23)
+            $graphics.FillRectangle($creditBrush, 22, 9, 6, 19)
         }
         finally {
             # Release drawing resources after creating the square artwork.
@@ -991,10 +991,10 @@ function Update-ResponsiveLayout {
     $compactSecondaryCaption.Visibility='Collapsed'
     # Restore visibility before measurement so resizing upward is deterministic.
     foreach ($control in @($primaryArea, $secondaryArea, $creditsArea, $primaryReset, $secondaryReset)) { $control.Visibility = 'Visible' }
-    # Consume the center gap before shortening labels or reducing numeric type size.
+    # Keep concise labels and consume the center gap before reducing numeric type size.
     foreach ($density in @('Full','ShortLabels','SmallType')) {
-        $primaryLabel.Text = if ($density -eq 'Full') { '5-hour window' } else { '5-hour' }
-        $secondaryLabel.Text = if ($density -eq 'Full') { 'Weekly window' } else { 'Weekly' }
+        $primaryLabel.Text = '5-hour'
+        $secondaryLabel.Text = 'Weekly'
         $primaryPercent.FontSize = if ($density -eq 'SmallType') { 15 } else { 18 }
         $secondaryPercent.FontSize = $primaryPercent.FontSize
         $creditsText.FontSize = $primaryPercent.FontSize

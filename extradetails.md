@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.6.2.
+This guide covers AI Usage Widget 2.6.3.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 

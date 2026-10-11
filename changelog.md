@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.6.3 — October 11, 2026
+
+- Match live tray and window icons to the desktop icon's upright blue, purple and sage bars. Preserve dynamic quota heights, the visible outline at zero usage and credit visibility rules.
+- Shorten widget labels to 5-hour and Weekly at every size.
+
 ## 2.6.2 — October 11, 2026
 
 - Show the running and available versions in the launcher restart prompt when they differ. Use a plain restart message for matching or unidentified versions, including hidden tray widgets and legacy titles.
