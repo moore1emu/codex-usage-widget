@@ -197,5 +197,18 @@ try {
     $script:SharedEnabled=$true;$script:ReadUsageEnabled=$true
     Update-Display
     if (-not $window.IsVisible) {throw 'Re-enabling a source did not restore its host.'}
+    # Reproduce the stacked width transition that previously hid bars only in the wider view.
+    $script:LocalEnabled=$true;$script:SharedEnabled=$false;$script:SharedClaudeOptions.Enabled=$false
+    $script:ClaudeOptions.Enabled=$true;$script:ClaudeOptions.Placement='Follow layout'
+    $script:AccountLayout='Stacked';$script:PrimaryResetHours=10;$script:ClaudeOptions.ResetHours=10
+    $script:CreditDisplayMode='Available';$script:ClaudeUsage=$script:Usage
+    foreach ($width in @(230,174,230)) {
+        $window.Width=$width;$window.Height=500;$window.UpdateLayout();Update-Display;$window.UpdateLayout()
+        # Check actual labeled meters for both accounts as header details drop and return.
+        foreach ($key in @('Local','Claude')) {
+            $bindings=$script:AccountCards[$key].Bindings
+            if ($bindings.primaryArea.Visibility -ne 'Visible' -or $bindings.primaryBar.Visibility -ne 'Visible' -or $bindings.secondaryBar.Visibility -ne 'Visible') {throw ('Stacked bars disappeared at width '+$width+' for '+$key)}
+        }
+    }
     Write-Output 'PASS: Claude quota validation, unknown plans, four-source layouts, independent geometry, close/restore and disabled-response isolation.'
 } finally {Close-TestWidget}

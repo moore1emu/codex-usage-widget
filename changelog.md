@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.6.5 — October 11, 2026
+
+- Stop reserving an unused toolbar strip inside account cards when deciding whether usage bars fit. Prevent bars from disappearing in a wider stacked view and returning only after narrowing hides optional header details.
+
 ## 2.6.4 — October 11, 2026
 
 - Keep usage bars visible at narrower widths by adding a compact labeled view with 13px labels/values and percentages without the redundant left suffix. Restore normal text and type size when widened; keep connected accounts aligned.

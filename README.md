@@ -6,7 +6,7 @@ A small Windows desktop and tray widget for **Codex and Claude subscription usag
 
 Use **Local only (pause sharing)** in the tray menu to hide shared accounts and pause all JSON reads and writes. Switch it off to restore saved connections. The pause survives restarts.
 
-**Version 2.6.4** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.6.5** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 

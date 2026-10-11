@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.6.4'
+$script:WidgetVersion = '2.6.5'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -1039,7 +1039,10 @@ function Update-ResponsiveLayout {
     if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout -and -not $script:SharedAccountLayout.TickerPossible) { $horizontalMetrics=$false }
     $ultraCompact = $horizontalMetrics -or $script:ProbingAccountLayout -or $window.ActualWidth -lt ($requiredWidth + 14) -or $window.ActualHeight -lt ($labeledHeight + 14)
     # Hide bars only after the essential labeled rows consume the available height.
-    $showBars = $window.ActualHeight -ge ($labeledHeight + 24 + 20 + 14)
+    # Account cards already exclude their heading and parent toolbar from the available height.
+    # Reserve the extra action strip only for a standalone widget, not a card with no toolbar.
+    $actionHeight = if ($script:RenderingAccountCard) { 0 } else { 20 }
+    $showBars = $window.ActualHeight -ge ($labeledHeight + 24 + $actionHeight + 14)
     $coreHeight = $labeledHeight + $(if ($showBars) { 24 } else { 0 })
     foreach ($area in @($primaryArea, $secondaryArea)) { $area.RowDefinitions[1].Height = [System.Windows.GridLength]::new($(if ($showBars) { 12 } else { 0 })) }
     $primaryBar.Visibility = if ($showBars) { 'Visible' } else { 'Collapsed' }
