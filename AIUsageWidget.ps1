@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.6.6'
+$script:WidgetVersion = '2.7.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -130,7 +130,7 @@ foreach ($key in @($script:AlertStates.Keys)) {
 # Show positive or unlimited credits by default, regardless of subscription usage.
 $script:CreditDisplayMode = 'Available'
 # Load the v2 sharing, account rendering, and unified native settings helpers.
-foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1','WidgetDefaults.ps1')) {
+foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharing.ps1','WidgetAccounts.ps1','WidgetSettings.ps1','WidgetDefaults.ps1','WidgetResources.ps1')) {
     . (Join-Path $script:WidgetDirectory $helper)
 }
 
@@ -806,6 +806,7 @@ function Save-WidgetState {
         refreshIntervalMinutes = $script:RefreshIntervalMinutes
         # Store account enable switches and Claude options locally, never in shared usage JSON.
         localEnabled = $script:LocalEnabled
+        resourceOptions = $script:ResourceOptions
         claude = $script:ClaudeOptions
         sharedClaude = $script:SharedClaudeOptions
         primaryColor = $script:PrimaryColor
@@ -1845,6 +1846,7 @@ $window.Add_Closing({
     # In Separate windows, the close button hides just the local account to the shared tray.
     if (($script:SeparateWindowsActive -or $script:ClaudeWindowActive -or $script:SharedClaudeWindowActive) -and -not $script:ExitRequested) { $_.Cancel=$true; Save-WidgetState; $window.Hide(); return }
     $script:ExitRequested = $true
+    Stop-ResourceSampling
     if ($script:SettingsForm) { $script:SettingsForm.Close() }
     if ($script:SeparateView) { Save-SeparateWindowBounds; $script:SeparateView.Window.Close() }
     # Close every optional Claude window and its browser before ending the shared process.
@@ -1875,7 +1877,7 @@ $pollTimer.Add_Tick({ Complete-UsageRefresh })
 
 $clockTimer = [Windows.Threading.DispatcherTimer]::new()
 $clockTimer.Interval = [TimeSpan]::FromSeconds(1)
-$clockTimer.Add_Tick({ Update-Display })
+$clockTimer.Add_Tick({ Invoke-ResourceTick; Update-Display })
 # Pause per-second countdown/layout work while hidden; account refreshes remain independent.
 $window.Add_IsVisibleChanged({
     if ($window.IsVisible) {

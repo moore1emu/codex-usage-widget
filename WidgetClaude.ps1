@@ -96,6 +96,8 @@ function Restore-ClaudeSettings {
     param($State)
     # Migrate old preferences without enabling new connections or disabling local Codex.
     if ($State.localEnabled -is [bool]) { $script:LocalEnabled=$State.localEnabled }
+    # Restore local resource switches without adding them to shared account exports.
+    foreach ($key in @('Local','Claude')) { if ($State.resourceOptions.$key -is [bool]) { $script:ResourceOptions[$key]=$State.resourceOptions.$key } }
     $saved = $State.claude
     if (-not $saved) { return }
     foreach ($key in @('Enabled','WeeklyDate','ResetAlert')) { if ($saved.$key -is [bool]) { $script:ClaudeOptions[$key]=$saved.$key } }

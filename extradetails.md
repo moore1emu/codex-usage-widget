@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.6.6.
+This guide covers AI Usage Widget 2.7.0.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
@@ -173,3 +173,13 @@ In **Claude**, enable local JSON writing and choose an output file outside the p
 Write and read switches and intervals are independent. Matching reads follow the local Claude refresh interval even if local Claude is disabled; manual-only stays manual. Local Claude must be enabled and freshly connected to publish new readings. Exports change only when usage or account metadata changes, with automatic 30-minute check-ins. Shared Claude has its own colors, reset display, notifications, placement, window size and position. Its name comes from the imported file. Failed or stale imports keep the last known reading and cannot trigger fresh-usage alerts.
 
 To show only **shared Codex and local Claude**, turn off **Enable local Codex account** in Codex, enable Shared Codex’s reader, and enable Claude. Disabled sources stop their panels, service polling and alerts while preserving their saved settings. Disabling local Codex also stops its JSON publisher. All sources can be disabled while Settings remains accessible through the tray.
+
+## Local desktop resource readings
+
+Enable **Show local CPU / RAM / GPU** independently in the local Codex and Claude tabs, then Apply or Save. It is off by default. Collection runs in the background every 3 seconds while a local widget window is visible, independently of quota refresh. All-hidden tray mode pauses collection.
+
+Totals include the installed desktop app and its child processes. The widget and its helpers, ChatGPT Classic, unrelated browsers and other applications are excluded. CPU is normalized across logical processors; RAM sums private working sets, avoiding shared-page double counting. GPU reports the busiest physical engine after summing that app's processes within each engine. Task Manager may use different grouping or sampling, so momentary readings can differ.
+
+RAM uses decimal MB and switches to GB above 1,000 MB, with two decimal places. Colored dots identify CPU (blue), RAM (purple), and GPU (sage). Narrow rows remove labels before shrinking values; hover identifies each value. Short windows hide resources before displacing quota bars or reset schedules. Connected accounts reserve equal space, but imported accounts never display this computer's hardware readings.
+
+Stopped or inaccessible apps, unsupported GPU counters, collection failures, and readings older than 15 seconds show a dash rather than an invented value. The feature recognizes the installed Windows desktop packages; developer API usage and remote server resources are not measured. No resource values or process identities are written to sharing files.

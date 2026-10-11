@@ -12,7 +12,7 @@ function New-AccountCard {
     $visual.Effect = $null
     $visual.CornerRadius = [Windows.CornerRadius]::new(0)
     $container = [Windows.Controls.Grid]::new()
-    foreach ($height in @('Auto','*','Auto')) { $row = [Windows.Controls.RowDefinition]::new(); $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($height); $container.RowDefinitions.Add($row) }
+    foreach ($height in @('Auto','*','Auto','Auto')) { $row = [Windows.Controls.RowDefinition]::new(); $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($height); $container.RowDefinitions.Add($row) }
     $headingPanel = [Windows.Controls.StackPanel]::new()
     $headingPanel.Margin = [Windows.Thickness]::new(6,3,6,3)
     $heading = [Windows.Controls.TextBlock]::new()
@@ -34,7 +34,11 @@ function New-AccountCard {
     $ageNotice.Margin=[Windows.Thickness]::new(3,0,3,0);$ageNotice.Visibility='Collapsed'
     [Windows.Controls.Grid]::SetRow($ageNotice,2)
     $container.Children.Add($ageNotice) | Out-Null
-    return @{ Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
+    # Keep local desktop resources outside the quota renderer and all shared JSON.
+    $resources=New-ResourceRow
+    [Windows.Controls.Grid]::SetRow($resources.Panel,3)
+    [void]$container.Children.Add($resources.Panel)
+    return @{ Resources=$resources; Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
 }
 
 function Initialize-AccountViews {
@@ -176,6 +180,28 @@ function Render-AccountCard {
         foreach ($control in @($secondaryPercent,$secondaryBar,$compactSecondaryPercent)) { $control.Foreground = $colors[1] }
         foreach ($control in @($creditsText,$compactCreditsText)) { $control.Foreground = $colors[2] }
         Update-Display
+        # Measure reset details before adding resources, so hardware never displaces quota bars or schedules.
+        $resourceKey=if ($Remote -or $SharedClaude) {''} elseif ($Claude) {'Claude'} else {'Local'}
+        $resourceHeight=Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $Width -Height $Height
+        $creditSpace=if ($script:CreditsVisible -or $ReserveCreditRow) {32} else {0}
+        $resourcesFit=$BarHeight -ge (2*(27+5+$script:FullResetHeight)+$creditSpace+38+20)
+        if (-not $resourcesFit) { $resourceHeight=0; $Card.Resources.Panel.Visibility='Collapsed' }
+        # Connected panels share the same resource reservation without inventing imported readings.
+        if ($SharedLayout) {
+            if ($ProbeLayout) {
+                $SharedLayout.ResourceHeight=[Math]::Max([double]$SharedLayout.ResourceHeight,$resourceHeight)
+                if (-not $resourcesFit) { $SharedLayout.ResourcesFit=$false }
+            } else {
+                $resourceHeight=if ($SharedLayout.ResourcesFit) {[double]$SharedLayout.ResourceHeight} else {0}
+                if (-not $resourceHeight) { $Card.Resources.Panel.Visibility='Collapsed' }
+            }
+        }
+        $Card.Container.RowDefinitions[3].Height=[Windows.GridLength]::new($resourceHeight)
+        if ($resourceHeight) {
+            $window.ActualHeight=[Math]::Max(1,$Height-$resourceHeight)
+            $window.BarHeight=[Math]::Max(1,$BarHeight-$resourceHeight)
+            Update-ResponsiveLayout
+        }
         # Keep account borders and actions in the shared window instead of duplicating them.
         $outerBorder.BorderThickness = [Windows.Thickness]::new(0)
     }
@@ -213,7 +239,7 @@ function Update-AccountViews {
     Update-ClaudeWindow
     Update-SharedClaudeWindow
     $keys = @(Get-EnabledAccounts | Where-Object { -not ($_ -eq 'Remote' -and $script:SeparateWindowsActive) -and -not ($_ -eq 'Claude' -and $script:ClaudeWindowActive) -and -not ($_ -eq 'SharedClaude' -and $script:SharedClaudeWindowActive) })
-    $originalSingle = $keys.Count -eq 1 -and $keys[0] -eq 'Local' -and -not $script:ClaudeOptions.Enabled -and -not ($script:SharedEnabled -and $script:ReadUsageEnabled) -and -not ($script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled)
+    $originalSingle = -not $script:ResourceOptions.Local -and $keys.Count -eq 1 -and $keys[0] -eq 'Local' -and -not $script:ClaudeOptions.Enabled -and -not ($script:SharedEnabled -and $script:ReadUsageEnabled) -and -not ($script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled)
     # Keep a disabled local account from leaving an empty desktop shell behind detached accounts.
     if (-not $keys.Count -and $window.IsLoaded) {$script:AutomaticallyHiddenHost=$true;$window.Hide()}
     elseif ($keys.Count -and $script:AutomaticallyHiddenHost) {$script:AutomaticallyHiddenHost=$false;$window.Show()}
@@ -279,7 +305,7 @@ function Update-AccountViews {
     }
     # Share only presentation measurements; separate windows and other layouts remain independent.
     $sharedLayout = if ($script:AccountLayout -in @('Side by side','Stacked') -and $keys.Count -gt 1) {
-        @{Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
+        @{ResourcesFit=$true;ResourceHeight=0;Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
     } else { $null }
     $passes = if ($sharedLayout) { @('Measure','Apply') } else { @('Apply') }
     foreach ($pass in $passes) {
@@ -495,7 +521,7 @@ function Update-WidgetClock {
     # Keep countdowns running while either account window remains visible.
     if (-not $clockTimer) { return }
     if ($window.IsVisible -or ($script:SeparateView -and $script:SeparateView.Window.IsVisible) -or ($script:ClaudeView -and $script:ClaudeView.Window.IsVisible) -or ($script:SharedClaudeView -and $script:SharedClaudeView.Window.IsVisible)) { $clockTimer.Start() }
-    else { $clockTimer.Stop() }
+    else { $clockTimer.Stop(); Stop-ResourceSampling }
 }
 
 function Update-SeparateWindows {

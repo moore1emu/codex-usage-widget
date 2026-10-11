@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.7.0 — October 11, 2026
+
+- Add optional local Codex and Claude CPU, private RAM, and GPU readings, collected in the background every 3 seconds while visible. Each local account has its own switch; readings are never exported to shared JSON.
+- Group desktop child processes while excluding the widget, its helpers, unrelated apps and recycled parent IDs. GPU shows the busiest combined engine; unavailable readings show a dash.
+- Switch RAM to GB above 1,000 MB. Tighten spacing and remove CPU/RAM/GPU labels before values, retaining GPU; hide the resource row before quota details need its space. Keep connected panels aligned.
+
 ## 2.6.6 — October 11, 2026
 
 - Keep reset details first while making usage-bar visibility stable during corner resizing. Use full wrapped reset text and a consistent header allowance for bar fitting so optional header/status changes and expanding reset schedules cannot make bars disappear and return unexpectedly.

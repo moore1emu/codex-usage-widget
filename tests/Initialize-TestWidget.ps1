@@ -24,6 +24,8 @@ $source = $source.Replace('[Windows.Threading.Dispatcher]::Run()','# The test co
 Invoke-Expression $source
 # Prevent account-service calls and file imports when a test renders the actual windows.
 function Start-UsageRefresh { }
+# Resource tests provide synthetic readings; never sample real applications during WPF tests.
+function Invoke-ResourceTick { }
 function Read-SharedUsage { }
 function Write-SharedUsage { }
 # Fixture windows must not initialize WebView2, query Claude, or start imported Claude file timers.
