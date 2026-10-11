@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.7.0'
+$script:WidgetVersion = '2.7.1'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -62,8 +62,20 @@ namespace CodexUsageWidget {
 '@
 }
 
-# Use a generic app identity when the widget is shared with other users.
-[void] [CodexUsageWidget.NativeMethods]::SetCurrentProcessExplicitAppUserModelID('CodexUsageWidget')
+function Initialize-NotificationIdentity {
+    # Register a friendly per-user name so Windows notification headers match the widget title.
+    try {
+        $identity=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes\AppUserModelId\AIUsageWidget')
+        try {
+            if ($identity.GetValue('DisplayName') -ne 'AI Usage Widget') { $identity.SetValue('DisplayName','AI Usage Widget') }
+        } finally { $identity.Dispose() }
+    } catch {
+        # Restricted registry policies must not prevent the widget or its existing alerts from starting.
+    }
+    # Keep the Windows identity space-free while the visible display name contains normal spaces.
+    [void][CodexUsageWidget.NativeMethods]::SetCurrentProcessExplicitAppUserModelID('AIUsageWidget')
+}
+Initialize-NotificationIdentity
 
 $script:WidgetDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ReaderPath = Join-Path $script:WidgetDirectory 'Get-CodexUsage.ps1'

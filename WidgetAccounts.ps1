@@ -13,7 +13,10 @@ function New-AccountCard {
     $visual.CornerRadius = [Windows.CornerRadius]::new(0)
     $container = [Windows.Controls.Grid]::new()
     foreach ($height in @('Auto','*','Auto','Auto')) { $row = [Windows.Controls.RowDefinition]::new(); $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($height); $container.RowDefinitions.Add($row) }
+    # Add a collapsible resource column without changing the existing account rows.
+    foreach ($width in @('*','0')) { $column=[Windows.Controls.ColumnDefinition]::new(); $column.Width=[Windows.GridLengthConverter]::new().ConvertFromString($width); $container.ColumnDefinitions.Add($column) }
     $headingPanel = [Windows.Controls.StackPanel]::new()
+    [Windows.Controls.Grid]::SetColumnSpan($headingPanel,2)
     $headingPanel.Margin = [Windows.Thickness]::new(6,3,6,3)
     $heading = [Windows.Controls.TextBlock]::new()
     $heading.Foreground = '#DDE3EF'
@@ -146,9 +149,23 @@ function Render-AccountCard {
         $Height=[Math]::Max(1,$Height-14)
         $BarHeight=[Math]::Max(1,$BarHeight-14)
     }
+    # Side-by-side and wide, short cards retain three resource values in a dedicated column.
+    $resourceKey=if ($Remote -or $SharedClaude) {''} elseif ($Claude) {'Claude'} else {'Local'}
+    $resourceColumn=($SharedLayout -and $SharedLayout.ResourceColumns) -or (-not $SharedLayout -and $Height -le 120 -and $Width -ge 300)
+    $resourceWidth=0.0
+    if ($resourceColumn) {
+        $resourceWidth=Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width ([Math]::Min(110,$Width-90)) -Height $Height -Vertical
+        if ($SharedLayout) {
+            if ($ProbeLayout) { $SharedLayout.ResourceWidth=[Math]::Max([double]$SharedLayout.ResourceWidth,$resourceWidth); $resourceWidth=[double]$SharedLayout.ResourceWidth }
+            else { $resourceWidth=[double]$SharedLayout.ResourceWidth }
+        }
+    }
+    $Card.Container.ColumnDefinitions[1].Width=[Windows.GridLength]::new($resourceWidth)
+    [Windows.Controls.Grid]::SetColumn($Card.Resources.Panel,$(if ($resourceColumn) {1} else {0}))
+    [Windows.Controls.Grid]::SetRow($Card.Resources.Panel,$(if ($resourceColumn) {1} else {3}))
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
-    $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; BarHeight=$BarHeight; Topmost=$true }
+    $window = [pscustomobject]@{ ActualWidth=([Math]::Max(1,$Width-$resourceWidth)); ActualHeight=$Height; BarHeight=$BarHeight; Topmost=$true }
     $original = @{ FullResetHeight=$script:FullResetHeight; SharedAccountLayout=$script:SharedAccountLayout; ProbingAccountLayout=$script:ProbingAccountLayout; RenderingAccountName=$script:RenderingAccountName; ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
@@ -180,27 +197,32 @@ function Render-AccountCard {
         foreach ($control in @($secondaryPercent,$secondaryBar,$compactSecondaryPercent)) { $control.Foreground = $colors[1] }
         foreach ($control in @($creditsText,$compactCreditsText)) { $control.Foreground = $colors[2] }
         Update-Display
-        # Measure reset details before adding resources, so hardware never displaces quota bars or schedules.
-        $resourceKey=if ($Remote -or $SharedClaude) {''} elseif ($Claude) {'Claude'} else {'Local'}
-        $resourceHeight=Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $Width -Height $Height
-        $creditSpace=if ($script:CreditsVisible -or $ReserveCreditRow) {32} else {0}
-        $resourcesFit=$BarHeight -ge (2*(27+5+$script:FullResetHeight)+$creditSpace+38+20)
-        if (-not $resourcesFit) { $resourceHeight=0; $Card.Resources.Panel.Visibility='Collapsed' }
-        # Connected panels share the same resource reservation without inventing imported readings.
-        if ($SharedLayout) {
-            if ($ProbeLayout) {
-                $SharedLayout.ResourceHeight=[Math]::Max([double]$SharedLayout.ResourceHeight,$resourceHeight)
-                if (-not $resourcesFit) { $SharedLayout.ResourcesFit=$false }
-            } else {
-                $resourceHeight=if ($SharedLayout.ResourcesFit) {[double]$SharedLayout.ResourceHeight} else {0}
-                if (-not $resourceHeight) { $Card.Resources.Panel.Visibility='Collapsed' }
+        if ($resourceColumn) {
+            # A side column consumes width only, retaining the full quota and reset height.
+            $Card.Container.RowDefinitions[3].Height=[Windows.GridLength]::new(0)
+        } else {
+            # Measure reset details before adding resources, so hardware never displaces quota bars or schedules.
+            $resourceKey=if ($Remote -or $SharedClaude) {''} elseif ($Claude) {'Claude'} else {'Local'}
+            $resourceHeight=Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $Width -Height $Height
+            $creditSpace=if ($script:CreditsVisible -or $ReserveCreditRow) {32} else {0}
+            $resourcesFit=$BarHeight -ge (2*(27+5+$script:FullResetHeight)+$creditSpace+38+20)
+            if (-not $resourcesFit) { $resourceHeight=0; $Card.Resources.Panel.Visibility='Collapsed' }
+            # Connected panels share the same resource reservation without inventing imported readings.
+            if ($SharedLayout) {
+                if ($ProbeLayout) {
+                    $SharedLayout.ResourceHeight=[Math]::Max([double]$SharedLayout.ResourceHeight,$resourceHeight)
+                    if (-not $resourcesFit) { $SharedLayout.ResourcesFit=$false }
+                } else {
+                    $resourceHeight=if ($SharedLayout.ResourcesFit) {[double]$SharedLayout.ResourceHeight} else {0}
+                    if (-not $resourceHeight) { $Card.Resources.Panel.Visibility='Collapsed' }
+                }
             }
-        }
-        $Card.Container.RowDefinitions[3].Height=[Windows.GridLength]::new($resourceHeight)
-        if ($resourceHeight) {
-            $window.ActualHeight=[Math]::Max(1,$Height-$resourceHeight)
-            $window.BarHeight=[Math]::Max(1,$BarHeight-$resourceHeight)
-            Update-ResponsiveLayout
+            $Card.Container.RowDefinitions[3].Height=[Windows.GridLength]::new($resourceHeight)
+            if ($resourceHeight) {
+                $window.ActualHeight=[Math]::Max(1,$Height-$resourceHeight)
+                $window.BarHeight=[Math]::Max(1,$BarHeight-$resourceHeight)
+                Update-ResponsiveLayout
+            }
         }
         # Keep account borders and actions in the shared window instead of duplicating them.
         $outerBorder.BorderThickness = [Windows.Thickness]::new(0)
@@ -305,8 +327,19 @@ function Update-AccountViews {
     }
     # Share only presentation measurements; separate windows and other layouts remain independent.
     $sharedLayout = if ($script:AccountLayout -in @('Side by side','Stacked') -and $keys.Count -gt 1) {
-        @{ResourcesFit=$true;ResourceHeight=0;Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
+        @{ResourceColumns=($script:AccountLayout -eq 'Side by side');ResourceWidth=0;ResourcesFit=$true;ResourceHeight=0;Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
     } else { $null }
+    # Measure all resource columns first so every quota probe uses the same remaining width.
+    if ($sharedLayout.ResourceColumns) {
+        $columnCardWidth=($width-($keys.Count-1))/$keys.Count
+        foreach ($key in @('Local','Claude')) {
+            if ($key -notin $keys) { continue }
+            $card=$script:AccountCards[$key]
+            $columnHeading=Set-AccountHeadingSize $card $columnCardWidth $height
+            $measuredColumn=Update-ResourceRow -Row $card.Resources -Key $key -Width ([Math]::Min(110,$columnCardWidth-90)) -Height ($height-$columnHeading) -Vertical
+            $sharedLayout.ResourceWidth=[Math]::Max([double]$sharedLayout.ResourceWidth,$measuredColumn)
+        }
+    }
     $passes = if ($sharedLayout) { @('Measure','Apply') } else { @('Apply') }
     foreach ($pass in $passes) {
         foreach ($key in @('Local','Remote','Claude','SharedClaude')) {

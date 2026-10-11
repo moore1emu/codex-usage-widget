@@ -18,6 +18,9 @@ $source = $source.Replace("`$script:StateDirectory = Join-Path ([Environment]::G
 # Suppress startup registration queries, live tray icons, and the automatic window/message loop.
 $startup = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-LaunchAtSignIn'},$true)
 $source = $source.Replace($startup.Extent.Text,'function Get-LaunchAtSignIn { return $false }')
+# Isolated windows must not register real Windows notification identities.
+$identity = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Initialize-NotificationIdentity'},$true)
+$source = $source.Replace($identity.Extent.Text,'function Initialize-NotificationIdentity { }')
 $source = $source.Replace('$trayIcon.Visible = $true','$trayIcon.Visible = $false')
 $source = $source.Replace('$window.Show()','# The test controls window visibility.')
 $source = $source.Replace('[Windows.Threading.Dispatcher]::Run()','# The test controls the message loop.')

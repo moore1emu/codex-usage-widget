@@ -55,12 +55,24 @@ $script:ResourceReadings.Local.Memory=999999999999999999
 Assert-Resource ($row.Panel.Visibility -eq 'Collapsed') 'A row that cannot fit all three values must collapse.'
 $script:ResourceReadings.Local.Memory=1280000000
 # Render connected panels with one enabled resource row and ensure equal reserved heights.
-$script:ClaudeOptions.Enabled=$true; $script:AccountLayout='Side by side'
+$script:ClaudeOptions.Enabled=$true; $script:AccountLayout='Stacked'
 $script:ClaudeUsage=$script:Usage
-$window.Width=600; $window.Height=420; $window.Show(); Wait-TestDispatcher 100
+$window.Width=600; $window.Height=840; $window.Show(); Wait-TestDispatcher 100
 Update-Display
 Assert-Resource ($script:AccountCards.Local.Container.RowDefinitions[3].Height.Value -eq 20) 'Local card should reserve its resource row.'
 Assert-Resource ($script:AccountCards.Claude.Container.RowDefinitions[3].Height.Value -eq 20) 'Connected account rows should remain aligned.'
+# Side-by-side resources use width instead of height and survive a short horizontal view.
+$script:AccountLayout='Side by side'; $window.Width=600; $window.Height=150
+Wait-TestDispatcher 100; Update-Display
+$localCard=$script:AccountCards.Local; $claudeCard=$script:AccountCards.Claude
+Assert-Resource ($localCard.Resources.Panel.Orientation -eq 'Vertical' -and $localCard.Resources.Panel.Visibility -eq 'Visible') 'Short side-by-side view must retain all three resources vertically.'
+Assert-Resource ($localCard.Resources.Items[2].Text -match '1%') 'GPU must remain in the column.'
+Assert-Resource ($localCard.Container.ColumnDefinitions[1].Width.Value -eq $claudeCard.Container.ColumnDefinitions[1].Width.Value) 'Connected quota widths must reserve equal resource columns.'
+Assert-Resource ($localCard.Container.RowDefinitions[3].Height.Value -eq 0) 'Vertical resources must not consume quota height.'
+# Switching back to stacked cards restores the footer, without leaving an empty side column.
+$script:AccountLayout='Stacked'; $window.Width=600; $window.Height=840
+Wait-TestDispatcher 100; Update-Display
+Assert-Resource ($localCard.Resources.Panel.Orientation -eq 'Horizontal' -and $localCard.Container.ColumnDefinitions[1].Width.Value -eq 0) 'Stacked view should restore the horizontal footer.'
 Save-WidgetState
 $saved=Get-Content -LiteralPath (Join-Path $script:TestState 'widget-state.json') -Raw | ConvertFrom-Json
 Assert-Resource ($saved.resourceOptions.Local -eq $true) 'Resource switches should persist locally.'
