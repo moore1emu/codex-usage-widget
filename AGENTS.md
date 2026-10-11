@@ -1,0 +1,11 @@
+# AI Usage Widget contributor guidance
+
+- Keep changes surgical and preserve deliberate behavior and useful comments. Ask before broader refactoring, architecture changes, or behavior beyond the requested scope.
+- Add concise inline comments immediately before meaningful setup, configuration, validation, account calls, transformations, loops, and file writes. Use CRLF for maintained text files.
+- Resolve project assets from the relevant script's directory. Keep computer-specific settings, browser profiles, usage exports, paths, and conversation handoffs outside shared artifacts.
+- Never inspect `.env` contents or copy credentials, authentication headers, cookies, account identifiers, or private account responses into source, logs, tests, screenshots, or commits. Use synthetic test fixtures; runtime readers may use their configured sign-in.
+- Preserve PowerShell 7 widget support and Windows PowerShell 5.1 launcher compatibility. Keep source settings and notification state independent per account.
+- Preserve atomic, change-only JSON publication and 30-minute check-ins. Idle five-hour allowance suppresses both reset timestamp changes in exports. Imported readings become stale after 31 minutes and hide visible values after one hour without a publisher check-in, retaining cached hover history.
+- Run the sharing tests for publication/import changes and the isolated WPF tests for display changes. The full regression runner is `tests/Run-Tests.ps1`; installation and execution commands belong in README.md.
+- Before completion, verify appropriate tests, CRLF and whitespace, portable paths, privacy, README/version/changelog accuracy, and the Git diff. Restart the user's widget only when requested or necessary for an approved operation. Publish only with explicit authorization, and report any GitHub push.
+- Develop and publish updates on the developer branch, including README version and changelog entries. Keep main unchanged until the owner confirms the changes work; merge only after that confirmation. Report each GitHub push.

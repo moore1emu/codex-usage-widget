@@ -4,7 +4,9 @@
 
 A small Windows desktop and tray widget for **Codex and Claude subscription usage left**, reset times, credits where available, and notifications. Show local accounts and accounts from another computer through private shared JSON files.
 
-**Version 2.5.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+Use **Local only (pause sharing)** in the tray menu to hide shared accounts and pause all JSON reads and writes. Switch it off to restore saved connections. The pause survives restarts.
+
+**Version 2.6.2** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -53,7 +55,7 @@ For two accounts, choose a private synced folder outside this project. Each comp
 
 For Claude, enable it in **Settings → Claude**, click **Apply**, then **Connect / open Claude Usage** and sign in on Claude’s website. An optional Microsoft WebView2 browser profile stays private on this computer. Developer API token usage and spending are not included. [Claude setup and limitations](extradetails.md#claude-subscriptions).
 
-Widget screenshots show captured real usage readings; settings screenshots show the current release. Account names are neutral and private file paths are replaced with placeholders. Settings stay local to each computer.
+Widget screenshots show captured real usage readings; settings screenshots show the current release. Account names are neutral and private file paths are replaced with placeholders. Settings stay local to each computer. Shared accounts show **Stale** after 31 minutes without a publisher check-in. After 1 hour, the values disappear and **Last refresh X hours ago** remains; hover to see the last calculated values and time. Fresh check-ins restore the values.
 
 ## Disclaimer
 

@@ -616,5 +616,7 @@ function Update-SharingTimer {
     # Automatic matched writers also need a timer for their 30-minute check-in; manual writers stay idle.
     if (-not $script:SharingTimer) { return }
     $script:SharingTimer.Stop()
+    # Applying settings must not restart paused file sharing.
+    if ($script:LocalOnly) {return}
     if ((($script:LocalEnabled -and $script:WriteUsageEnabled -and ($script:WriteIntervalMinutes -gt 0 -or ($script:WriteIntervalMinutes -eq -1 -and $script:RefreshIntervalMinutes -gt 0))) -or ($script:SharedEnabled -and $script:ReadUsageEnabled -and $script:ReadIntervalMinutes -gt 0))) { $script:SharingTimer.Start() }
 }

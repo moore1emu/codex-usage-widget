@@ -50,7 +50,14 @@ Read-SharedUsage
 if (-not [object]::ReferenceEquals($cached,$script:RemoteUsage)) {throw 'Unchanged file was reparsed.'}
 # Stale status uses the check-in allowance, but old snapshots still cannot trigger alerts.
 $script:RemoteUsage.fetchedAt=$now-2000
+$script:RemoteWrittenAt=$now-2000
 if ((Get-SharingStatus Source) -notmatch 'stale') {throw 'Offline peer is not marked stale.'}
+# A publisher check-in keeps old but unchanged values current; local file reads do not.
+$script:RemoteWrittenAt=$now
+if ((Get-SharingStatus Source) -match 'stale') {throw 'Fresh publisher check-in was treated as stale.'}
+$script:RemoteWrittenAt=$now-3601
+if ((Get-SharingStatus Source) -notmatch 'Last refresh.*hours ago') {throw 'Expired publisher did not retain its age.'}
+$script:RemoteWrittenAt=$now
 $script:Notified=$false
 function Show-UsageWarnings { $script:Notified=$true }
 $script:RemoteUsage.fetchedAt=$now-600

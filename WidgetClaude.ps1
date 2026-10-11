@@ -54,9 +54,9 @@ function ConvertTo-ClaudeUsage {
 function Get-EnabledAccounts {
     # Use stable source keys rather than display names, which may be identical.
     if ($script:LocalEnabled) { 'Local' }
-    if ($script:SharedEnabled -and $script:ReadUsageEnabled) { 'Remote' }
+    if (-not $script:LocalOnly -and $script:SharedEnabled -and $script:ReadUsageEnabled) { 'Remote' }
     if ($script:ClaudeOptions.Enabled) { 'Claude' }
-    if ($script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled) { 'SharedClaude' }
+    if (-not $script:LocalOnly -and $script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled) { 'SharedClaude' }
 }
 
 function Get-AccountName {

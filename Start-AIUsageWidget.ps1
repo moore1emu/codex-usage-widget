@@ -21,7 +21,60 @@ function Get-ExistingWidgetProcesses {
     }
 }
 
+function Get-RunningWidgetVersions {
+    param([object[]]$Instances)
+    # Read live window titles, including hidden tray windows, rather than the updated file on disk.
+    if (-not ('AIUsageLauncher.VersionWindows' -as [type])) {
+        Add-Type @'
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+namespace AIUsageLauncher {
+    public static class VersionWindows {
+        private delegate bool EnumCallback(IntPtr hwnd, IntPtr parameter);
+        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumCallback callback, IntPtr parameter);
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+        [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int length);
+        public static string[] Titles(int processId) {
+            var titles = new List<string>();
+            // Limit title inspection to the exact widget processes already verified by the launcher.
+            EnumWindows(delegate(IntPtr hwnd, IntPtr ignored) {
+                uint pid;
+                GetWindowThreadProcessId(hwnd, out pid);
+                if (pid != processId) return true;
+                var title = new StringBuilder(256);
+                GetWindowText(hwnd, title, title.Capacity);
+                titles.Add(title.ToString());
+                return true;
+            }, IntPtr.Zero);
+            return titles.ToArray();
+        }
+    }
+}
+'@
+    }
+    # The main shell keeps its version title even when account windows or Settings are open.
+    foreach ($instance in $Instances) {
+        foreach ($title in [AIUsageLauncher.VersionWindows]::Titles([int]$instance.ProcessId)) {
+            if ($title -match '^(?:AI Usage Widget|Codex Usage) v(\d+\.\d+\.\d+)$') { $Matches[1] }
+        }
+    }
+}
+
+function Get-WidgetRestartText {
+    param([string[]]$RunningVersions,[string]$TargetVersion)
+    # Show an update only when both sides are known and at least one running version differs.
+    $versions=@($RunningVersions | Where-Object { $_ } | Sort-Object -Unique)
+    if ($TargetVersion -and $versions.Count -and @($versions | Where-Object {$_ -ne $TargetVersion}).Count) {
+        return "Restart to update from version $($versions -join ', ') to version ${TargetVersion}? Your settings will be saved before it closes."
+    }
+    # Same-version and older unidentified widgets use a plain restart prompt.
+    return 'Restart the widget? Your settings will be saved before it closes.'
+}
+
 function Confirm-WidgetRestart {
+    param([object[]]$Instances,[string]$WidgetPath)
     # Offer an explicit restart action with Cancel as the safe default.
     Add-Type -AssemblyName System.Windows.Forms, System.Drawing
     $dialog = New-Object System.Windows.Forms.Form
@@ -34,7 +87,11 @@ function Confirm-WidgetRestart {
     $dialog.TopMost = $true
     $label = New-Object System.Windows.Forms.Label
     $label.SetBounds(15,15,390,50)
-    $label.Text = 'Restart the widget to load the current version? Your settings will be saved before it closes.'
+    # Read only the maintained version declaration; never execute the widget to inspect its version.
+    $targetVersion=$null
+    $source=[IO.File]::ReadAllText($WidgetPath)
+    if ($source -match '\$script:WidgetVersion\s*=\s*''(\d+\.\d+\.\d+)''') { $targetVersion=$Matches[1] }
+    $label.Text = Get-WidgetRestartText -RunningVersions @(Get-RunningWidgetVersions $Instances) -TargetVersion $targetVersion
     $restart = New-Object System.Windows.Forms.Button
     $restart.SetBounds(125,80,145,28)
     $restart.Text = 'Restart widget'
@@ -168,7 +225,7 @@ try {
     # Ask only for manual launches; automatic launchers leave a current instance untouched.
     $existing = @(Get-ExistingWidgetProcesses -WidgetPath @($widgetPath,(Join-Path $PSScriptRoot 'CodexUsageWidget.ps1')))
     if ($existing.Count) {
-        if ($IfNotRunning -or -not (Confirm-WidgetRestart)) { return }
+        if ($IfNotRunning -or -not (Confirm-WidgetRestart -Instances $existing -WidgetPath $widgetPath)) { return }
         Close-ExistingWidgets -Instances $existing
     }
 

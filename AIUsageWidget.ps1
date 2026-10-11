@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.5.1'
+$script:WidgetVersion = '2.6.2'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -504,6 +504,11 @@ foreach ($name in @('Mini','Small','Medium','Large / Default')) {
 $trayRefreshItem = $trayMenu.Items.Add('Refresh')
 # Open the General and Shared settings without disabling the widget.
 $settingsItem = $trayMenu.Items.Add('Settings...')
+# Pause all imported accounts and JSON exports with one reversible switch.
+$localOnlyItem = $trayMenu.Items.Add('Local only (pause sharing)')
+$localOnlyItem.CheckOnClick = $true
+$localOnlyItem.ToolTipText = 'Pause shared Codex/Claude accounts and all JSON reads and writes. Connection choices are preserved.'
+$localOnlyItem.Add_Click({ Set-LocalOnlyMode -Enabled $localOnlyItem.Checked })
 # Provide predictable window sizes without requiring manual dragging.
 $sizeMenu = [System.Windows.Forms.ToolStripMenuItem]::new('Window size')
 [void]$trayMenu.Items.Add($sizeMenu)
@@ -540,13 +545,14 @@ $startupItem.Add_Click({
     $startupItem.Checked = Get-LaunchAtSignIn
 })
 $trayMenu.Add_Opening({
+    $localOnlyItem.Checked = [bool]$script:LocalOnly
     $startupItem.Checked = Get-LaunchAtSignIn
     $traySharedItem.Visible = [bool]$script:SeparateWindowsActive
     $sharedSizeMenu.Visible = [bool]$script:SeparateWindowsActive
     $traySharedItem.Text = 'Open Shared Codex · ' + $script:RemoteDisplayName
     $claudeOpenItem.Visible=[bool]$script:ClaudeOptions.Enabled
     $claudeOpenItem.Text='Open Claude · '+$script:ClaudeOptions.Name
-    $sharedClaudeOpenItem.Visible=$script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled
+    $sharedClaudeOpenItem.Visible=-not $script:LocalOnly -and $script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled
     $sharedClaudeOpenItem.Text='Open Shared Claude · '+$script:SharedClaudeOptions.Name
     $trayOpenItem.Text = 'Open Codex · ' + $script:LocalDisplayName
 })
@@ -812,6 +818,8 @@ function Save-WidgetState {
         showWeeklyResetDate = $script:ShowWeeklyResetDate
         creditDisplayMode = $script:CreditDisplayMode
         # Keep file connections and aliases on this computer, outside the synchronized project.
+        # Store the pause separately from configured connections.
+        localOnly = $script:LocalOnly
         sharedEnabled = $script:SharedEnabled
         sharedCreditDisplayMode = $script:SharedCreditDisplayMode
         sharedPrimaryResetHours = $script:SharedPrimaryResetHours
@@ -1226,6 +1234,14 @@ function Update-TrayIcon {
             SharedClaude {$snapshot=$script:SharedClaudeUsage;$scheme=$script:SharedClaudeOptions.Scheme;$mode='Off';$failure=$script:ClaudeFileState.ReadError}
             default {$snapshot=$null;$scheme=$script:LocalScheme;$mode='Off';$failure=$null}
         }
+        # Imported tray meters use the same expiry rule as cards while keeping cached amounts for hover.
+        $reading=$null;$cachedSnapshot=$snapshot
+        if ($key -in @('Remote','SharedClaude')) {
+            $checked=if ($key -eq 'SharedClaude') {$script:ClaudeFileState.RemoteWrittenAt} else {$script:RemoteWrittenAt}
+            $reading=Get-SharedReadingState -Snapshot $snapshot -WrittenAt $checked
+            if ($reading.Stale) {$failure='Stale'}
+            if ($reading.Expired) {$snapshot=$null}
+        }
         $script:Usage=$snapshot;$script:CreditDisplayMode=$mode;$script:RefreshError=$failure
         $colors=$script:ColorSchemes[$scheme]
         $script:PrimaryColor=$colors[0];$script:SecondaryColor=$colors[1];$script:CreditColor=$colors[2]
@@ -1233,6 +1249,17 @@ function Update-TrayIcon {
         # Skip GDI icon allocation when only a countdown or file-check timestamp changed.
         $renderKey=@($key,$script:TrayAccountName,$scheme,$mode,$failure,(Get-SharedUsageKey $snapshot)) | ConvertTo-Json -Compress
         if ($renderKey -ne $script:LastTrayRenderKey) {Update-SelectedTrayIcon;$script:LastTrayRenderKey=$renderKey}
+        # Keep the last calculated amounts available on hover even after the tray bars are cleared.
+        if ($reading.Stale -and $cachedSnapshot) {
+            $calculated=[DateTimeOffset]::FromUnixTimeSeconds([long]$cachedSnapshot.fetchedAt).ToLocalTime().ToString('MMM d h:mm tt')
+            $tip="$script:TrayAccountName · $($reading.Notice)"
+            foreach ($entry in @(@{Key='primary';Label='5h'},@{Key='secondary';Label='Wk'})) {
+                $quota=$cachedSnapshot.($entry.Key)
+                if ($null -ne $quota.usedPercent) {$tip+=' · '+$entry.Label+' '+('{0:0.#}%' -f (100-[double]$quota.usedPercent))}
+            }
+            $tip+=' · Calculated '+$calculated
+            $trayIcon.Text=$tip.Substring(0,[Math]::Min(127,$tip.Length))
+        }
     } finally {
         # Restore the local data and palette before the next account render or service callback.
         foreach ($name in $original.Keys) {Set-Variable -Scope Script -Name $name -Value $original[$name]}
@@ -1613,6 +1640,8 @@ if (Test-Path -LiteralPath $script:StatePath) {
         # Older saved states retain local Codex and leave the new Claude connection disabled.
         Restore-ClaudeSettings $state
         Restore-SharedClaudeSettings $state
+        # Older saved settings leave sharing unpaused.
+        if ($state.localOnly -is [bool]) { $script:LocalOnly = $state.localOnly }
         # Restore valid saved colors; older settings files keep the defaults.
         if ($state.primaryColor -match '^#[0-9A-Fa-f]{6}$') { $script:PrimaryColor = $state.primaryColor }
         if ($state.secondaryColor -match '^#[0-9A-Fa-f]{6}$') { $script:SecondaryColor = $state.secondaryColor }

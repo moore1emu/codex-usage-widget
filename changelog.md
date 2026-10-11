@@ -2,6 +2,20 @@
 
 [Back to README](README.md)
 
+## 2.6.2 — October 11, 2026
+
+- Show the running and available versions in the launcher restart prompt when they differ. Use a plain restart message for matching or unidentified versions, including hidden tray widgets and legacy titles.
+
+## 2.6.1 — October 11, 2026
+
+- Add a persistent Local only tray switch to pause shared Codex/Claude accounts and all JSON reads and writes without losing configured connections. Restore sharing with the same switch.
+
+## 2.6.0 — October 9, 2026
+
+- Label Shared Codex and Shared Claude readings Stale after 31 minutes without a publisher check-in. After one hour, hide visible values and tray bars and show Last refresh X hours ago.
+- Preserve cached readings for hover history, including last calculated percentages, known credits and calculation time. Restore values when a fresh check-in arrives. Use publisher writtenAt rather than local file-read time; retain a reading-time fallback for older exports.
+- Cover connected, picker, separate, compact and menu-height views with isolated regression tests, and add portable contributor guidance.
+
 ## 2.5.1 — October 8, 2026
 
 - Ignore both five-hour and weekly reset timestamp changes in shared JSON while five-hour usage remaining is 100%. Keep the last published weekly reset date through restarts and 30-minute check-ins; resume current reset dates when usage begins.

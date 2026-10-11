@@ -12,7 +12,7 @@ function New-AccountCard {
     $visual.Effect = $null
     $visual.CornerRadius = [Windows.CornerRadius]::new(0)
     $container = [Windows.Controls.Grid]::new()
-    foreach ($height in @('Auto','*')) { $row = [Windows.Controls.RowDefinition]::new(); $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($height); $container.RowDefinitions.Add($row) }
+    foreach ($height in @('Auto','*','Auto')) { $row = [Windows.Controls.RowDefinition]::new(); $row.Height = [Windows.GridLengthConverter]::new().ConvertFromString($height); $container.RowDefinitions.Add($row) }
     $headingPanel = [Windows.Controls.StackPanel]::new()
     $headingPanel.Margin = [Windows.Thickness]::new(6,3,6,3)
     $heading = [Windows.Controls.TextBlock]::new()
@@ -28,7 +28,13 @@ function New-AccountCard {
     $container.Children.Add($headingPanel) | Out-Null
     [Windows.Controls.Grid]::SetRow($visual,1)
     $container.Children.Add($visual) | Out-Null
-    return @{ Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel }
+    # Reserve a short stale line without depending on the optional full account status heading.
+    $ageNotice = [Windows.Controls.TextBlock]::new()
+    $ageNotice.Foreground='#AAB2C5';$ageNotice.FontSize=9;$ageNotice.TextTrimming='CharacterEllipsis'
+    $ageNotice.Margin=[Windows.Thickness]::new(3,0,3,0);$ageNotice.Visibility='Collapsed'
+    [Windows.Controls.Grid]::SetRow($ageNotice,2)
+    $container.Children.Add($ageNotice) | Out-Null
+    return @{ Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
 }
 
 function Initialize-AccountViews {
@@ -115,6 +121,21 @@ function Set-AccountHeadingSize {
 
 function Render-AccountCard {
     param($Card, $Snapshot, [string] $Name, [string] $Status, [string] $Scheme, [double] $Width, [double] $Height, [switch] $Remote, [switch] $Claude, [switch] $SharedClaude, [switch] $ReserveCreditRow, [hashtable] $SharedLayout, [switch] $ProbeLayout)
+    # Evaluate both imported providers on every render, including cached-file and countdown ticks.
+    $reading=$null
+    if ($Remote -or $SharedClaude) {
+        $checked=if ($SharedClaude) { $script:ClaudeFileState.RemoteWrittenAt } else { $script:RemoteWrittenAt }
+        $reading=Get-SharedReadingState -Snapshot $Snapshot -WrittenAt $checked
+    }
+    $Card.AgeNotice.Text=if ($reading) {$reading.Notice} else {''}
+    $Card.AgeNotice.Visibility=if ($reading.Stale) {'Visible'} else {'Collapsed'}
+    $Card.Visual.Visibility=if ($reading.Expired) {'Collapsed'} else {'Visible'}
+    # Expired cards replace the meters with age text; stale cards keep a separate line beneath them.
+    [Windows.Controls.Grid]::SetRow($Card.AgeNotice,$(if ($reading.Expired) {1} else {2}))
+    $Card.AgeNotice.VerticalAlignment=if ($reading.Expired) {'Center'} else {'Bottom'}
+    # Wrap the age message in narrow expired cards when enough vertical space remains.
+    $Card.AgeNotice.TextWrapping=if ($reading.Expired -and $Height -ge 30) {'Wrap'} else {'NoWrap'}
+    if ($reading.Stale -and -not $reading.Expired) { $Height=[Math]::Max(1,$Height-14) }
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
     $window = [pscustomobject]@{ ActualWidth=$Width; ActualHeight=$Height; Topmost=$true }
@@ -159,6 +180,23 @@ function Render-AccountCard {
     $Card.Heading.Text = $Name
     $Card.Status.Text = $Status
     $Card.Container.ToolTip = "$Name`n$Status"
+    # Hover reveals the cached quota amounts and their original calculation time after values are hidden.
+    if ($reading.Stale -and $Snapshot) {
+        $lines=@($Name,$reading.Notice)
+        foreach ($entry in @(@{Key='primary';Label='5-hour'},@{Key='secondary';Label='Weekly'})) {
+            $quota=$Snapshot.($entry.Key)
+            $amount=if ($null -ne $quota.usedPercent) {'{0:0.##}% left' -f (100-[double]$quota.usedPercent)} else {'—'}
+            $lines+=$entry.Label+': '+$amount
+        }
+        if ($Snapshot.credits.unlimited) { $lines+='Credits: unlimited' }
+        elseif ($null -ne $Snapshot.credits.balance) { $lines+='Credits: '+[decimal]::Parse([string]$Snapshot.credits.balance,[Globalization.CultureInfo]::InvariantCulture).ToString('0.##') }
+        $calculated=[DateTimeOffset]::FromUnixTimeSeconds([long]$Snapshot.fetchedAt).ToLocalTime().ToString('MMM d, h:mm tt')
+        $lines+='Last calculated '+$calculated
+        $Card.Container.ToolTip=$lines -join "`n"
+    }
+    # Apply the same hover details to the age line and nested widget visual.
+    $Card.AgeNotice.ToolTip=$Card.Container.ToolTip
+    $Card.Visual.ToolTip=if ($reading.Stale) {$Card.Container.ToolTip} else {$null}
 }
 
 function Update-AccountViews {
@@ -453,7 +491,7 @@ function Update-WidgetClock {
 function Update-SeparateWindows {
     # Transition windows only after startup has loaded real bounds, avoiding duplicate shells in tests.
     if ($script:ChangingAccountWindows -or -not ($window -is [Windows.Window]) -or -not $window.IsLoaded) { return }
-    $separate = $script:LocalEnabled -and $script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Separate windows'
+    $separate = -not $script:LocalOnly -and $script:LocalEnabled -and $script:SharedEnabled -and $script:ReadUsageEnabled -and $script:AccountLayout -eq 'Separate windows'
     if ($separate -ne [bool]$script:SeparateWindowsActive) {
         $script:ChangingAccountWindows = $true
         try {

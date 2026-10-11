@@ -34,6 +34,8 @@ $script:ClaudeFileState=@{
     RemoteRefreshMinutes=5
     RemoteCheckInMinutes=0
     RemoteUsageChangedAt=0
+    # Keep Claude's publisher check-in separate from Codex's check-in and local read timer.
+    RemoteWrittenAt=0
     ReadFileStamp=''
     LastReadAt=$null
     ReadError=$null
@@ -106,6 +108,8 @@ function Invoke-ClaudeFileContext {
 
 function Invoke-ClaudeSharing {
     param([switch]$Force,[switch]$Fresh)
+    # Pause Claude publication and imports, including forced refreshes.
+    if ($script:LocalOnly) {return}
     # Manual connections run only on explicit refresh; automatic files share a lightweight timer.
     if (-not $script:SharedClaudeOptions.Enabled -and -not ($script:ClaudeOptions.Enabled -and $script:SharedClaudeOptions.WriteEnabled)) {return}
     $options=$script:SharedClaudeOptions
@@ -128,6 +132,8 @@ function Update-ClaudeSharingTimer {
         $script:ClaudeSharingTimer.Add_Tick({Invoke-ClaudeSharing;Update-Display;Update-TrayIcon})
     }
     $script:ClaudeSharingTimer.Stop()
+    # Keep the file timer stopped during the tray pause.
+    if ($script:LocalOnly) {return}
     if ($script:SharedClaudeOptions.Enabled -or ($script:ClaudeOptions.Enabled -and $script:SharedClaudeOptions.WriteEnabled)) {
         [void][IO.Directory]::CreateDirectory((Join-Path $script:StateDirectory 'ClaudeSharing'))
         # Match remote-only reads to Claude's chosen cadence even if local Claude is turned off.
@@ -211,7 +217,7 @@ function Initialize-SharedClaudeWindow {
 function Update-SharedClaudeWindow {
     # Move the SharedClaude card only on an attachment transition, preserving independent window geometry.
     if ($script:ChangingSharedClaudeWindow -or -not ($window -is [Windows.Window]) -or -not $window.IsLoaded) { return }
-    $separate=$script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled -and ($script:SharedClaudeOptions.Placement -eq 'Separate window' -or ($script:SharedClaudeOptions.Placement -eq 'Follow layout' -and $script:AccountLayout -eq 'Separate windows'))
+    $separate=-not $script:LocalOnly -and $script:SharedClaudeOptions.Enabled -and $script:SharedClaudeOptions.ReadEnabled -and ($script:SharedClaudeOptions.Placement -eq 'Separate window' -or ($script:SharedClaudeOptions.Placement -eq 'Follow layout' -and $script:AccountLayout -eq 'Separate windows'))
     if ($separate -ne [bool]$script:SharedClaudeWindowActive) {
         $script:ChangingSharedClaudeWindow=$true
         try {

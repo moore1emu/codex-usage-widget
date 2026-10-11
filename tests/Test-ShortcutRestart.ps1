@@ -7,6 +7,18 @@ $source=[IO.File]::ReadAllText((Join-Path $project 'Start-AIUsageWidget.ps1'))
 $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$null,[ref]$null)
 $close=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Close-ExistingWidgets'},$true)
 Invoke-Expression $close.Extent.Text
+# Load version helpers without displaying a real restart confirmation.
+foreach ($name in @('Get-RunningWidgetVersions','Get-WidgetRestartText')) {
+    $node=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
+    Invoke-Expression $node.Extent.Text
+}
+# Compare known releases and retain a plain restart when the live version is unknown.
+if ((Get-WidgetRestartText @('2.6.1') '2.6.2') -notmatch 'from version 2.6.1 to version 2.6.2') {throw 'Update prompt omitted versions.'}
+foreach ($versions in @(@('2.6.2'),@())) {
+    if ((Get-WidgetRestartText -RunningVersions $versions -TargetVersion '2.6.2') -match 'update|current version') {throw 'Same or unknown version incorrectly showed an update.'}
+}
+if ((Get-WidgetRestartText @('2.5.1','2.6.1') '2.6.2') -notmatch '2.5.1, 2.6.1') {throw 'Multiple running versions were lost.'}
+Write-Output 'PASS: different, matching, unknown and multiple version prompt text.'
 # Check both script filenames without querying or touching the user's running processes.
 $detect=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-ExistingWidgetProcesses'},$true)
 Invoke-Expression $detect.Extent.Text
@@ -44,6 +56,13 @@ foreach ($scenario in @('Visible','LocalHidden','BothHidden','SettingsOpen','Sin
         while (-not [IO.File]::Exists((Join-Path $state 'ready')) -and -not $child.HasExited -and [DateTime]::UtcNow -lt $deadline) {Start-Sleep -Milliseconds 100}
         if (-not [IO.File]::Exists((Join-Path $state 'ready'))) {throw ('Fixture failed: '+(Get-Content (Join-Path $state 'errors.txt') -Raw))}
         $instance=[pscustomobject]@{ProcessId=$child.Id;CreationDate=$child.StartTime}
+        # Version detection must also work while tray-only, in Settings, and with legacy titles.
+        $versions=@(Get-RunningWidgetVersions @($instance))
+        $expected=if ($scenario -eq 'LegacyTitle') {'2.2.2'} else {
+            $widgetSource=[IO.File]::ReadAllText((Join-Path $project 'AIUsageWidget.ps1'))
+            if ($widgetSource -match '\$script:WidgetVersion\s*=\s*''(\d+\.\d+\.\d+)''') {$Matches[1]} else {throw 'Version declaration missing.'}
+        }
+        if ($versions.Count -ne 1 -or $versions[0] -ne $expected) {throw ('Live version detection failed for '+$scenario)}
         Close-ExistingWidgets @($instance)
         if (-not $child.WaitForExit(3000) -or $child.ExitCode -ne 0 -or -not [IO.File]::Exists((Join-Path $state 'shutdown'))) {throw ('Shutdown failed for '+$scenario+': '+(Get-Content (Join-Path $state 'errors.txt') -Raw))}
         # Verify shutdown persisted each account's final size before the child exited.

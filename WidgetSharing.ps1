@@ -1,4 +1,6 @@
 # Keep shared account display and notification preferences independent of the local account.
+# Pause file sharing without changing saved connection choices.
+$script:LocalOnly = $false
 $script:SharedEnabled = $false
 $script:SharedCreditDisplayMode = 'Available'
 $script:SharedPrimaryResetHours = 25
@@ -39,6 +41,8 @@ $script:UsageChangedAt = 0
 $script:SharedCheckInMinutes = 30
 $script:RemoteCheckInMinutes = 0
 $script:RemoteUsageChangedAt = 0
+# Track the publisher check-in independently of when its quota values were calculated.
+$script:RemoteWrittenAt = 0
 $script:ReadFileStamp = ''
 $script:NextWriteAt = [DateTimeOffset]::Now
 $script:NextReadAt = [DateTimeOffset]::Now
@@ -128,6 +132,8 @@ function Get-SharedUsageKey {
 
 function Write-SharedUsage {
     param([switch] $Force)
+    # Block even forced publication while the tray pause is active.
+    if ($script:LocalOnly) { return }
     # Turning off local Codex also stops publishing an increasingly stale local reading.
     if ($script:LocalEnabled -eq $false) { return }
     # A file timer may publish the latest reading, but must never change its original age.
@@ -191,6 +197,8 @@ function Write-SharedUsage {
 }
 
 function Read-SharedUsage {
+    # Keep cached readings without reading files during the pause.
+    if ($script:LocalOnly) { return }
     if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled) { return }
     try {
         $path = Resolve-UsageFilePath $script:UsageInputPath
@@ -223,6 +231,11 @@ function Read-SharedUsage {
         $script:RemoteDisplayName = if ($label) { $label.Substring(0,[Math]::Min(40,$label.Length)) } else { 'Shared computer' }
         $script:RemoteSourceId = [string]$incoming.sourceId
         $script:RemoteUsage = $snapshot
+        # Trust only bounded publisher timestamps; older files fall back to their reading time.
+        $written = [long]0
+        $validWritten = [long]::TryParse([string]$incoming.writtenAt, [ref]$written) -and $written -gt 0 -and
+            $written -le [DateTimeOffset]::Now.AddMinutes(5).ToUnixTimeSeconds()
+        $script:RemoteWrittenAt = if ($validWritten) { $written } else { $snapshot.fetchedAt }
         $script:RemoteRefreshMinutes = if ($incoming.refreshIntervalMinutes -in @(0,1,5,15,30)) { [int]$incoming.refreshIntervalMinutes } else { 5 }
         # Older publishers retain their existing freshness rules and use the snapshot date as a fallback.
         $script:RemoteCheckInMinutes = if ($incoming.checkInMinutes -eq 30) { 30 } else { 0 }
@@ -237,17 +250,31 @@ function Read-SharedUsage {
     }
 }
 
+function Get-SharedReadingState {
+    param($Snapshot, [long] $WrittenAt = 0)
+    # Age exports by publisher check-in, never by this computer's successful file reads.
+    if (-not $Snapshot) { return @{ Stale=$false;Expired=$false;Notice='';AgeSeconds=0 } }
+    $checked = if ($WrittenAt -gt 0) { $WrittenAt } else { [long]$Snapshot.fetchedAt }
+    $age = [Math]::Max(0,[DateTimeOffset]::Now.ToUnixTimeSeconds() - $checked)
+    $ageText = if ($age -lt 3600) { '{0} minutes' -f [int][Math]::Floor($age/60) } else { '{0:0.0} hours' -f ($age/3600) }
+    # Keep cached readings for hover while removing visible values after one hour without a check-in.
+    $expired = $age -ge 3600
+    return @{ Stale=($age -ge 1860);Expired=$expired;AgeSeconds=$age;Notice=$(if ($expired) { "Last refresh $ageText ago" } elseif ($age -ge 1860) { 'Stale' } else { '' }) }
+}
+
 function Get-SharingStatus {
     param([ValidateSet('Write','Read','Source')] [string] $Kind)
+    # Explain why configured connections are temporarily inactive.
+    if ($script:LocalOnly) { return 'Local only: sharing paused' }
     # Report file operations separately from the source account's actual update time.
     if ($Kind -eq 'Source') {
         if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled) { return '' }
         if (-not $script:RemoteUsage) { return 'Shared computer: waiting for a valid reading' }
-        $age = [Math]::Max(0,([DateTimeOffset]::Now.ToUnixTimeSeconds() - $script:RemoteUsage.fetchedAt))
-        $limit = [Math]::Max(120, ($script:RemoteCheckInMinutes + 2 * $script:RemoteRefreshMinutes) * 60)
+        $reading = Get-SharedReadingState -Snapshot $script:RemoteUsage -WrittenAt $script:RemoteWrittenAt
+        $age = $reading.AgeSeconds
         $ageText = if ($age -lt 60) { '{0}s' -f [int]$age } elseif ($age -lt 3600) { '{0}m' -f [int]($age / 60) } else { '{0:N1}h' -f ($age / 3600) }
         $changed = [DateTimeOffset]::FromUnixTimeSeconds([long]$script:RemoteUsageChangedAt).ToLocalTime().ToString('MMM d, h:mm tt')
-        return "$script:RemoteDisplayName · last usage change $changed · last checked $ageText ago" + $(if ($age -gt $limit) { ' · stale' } else { '' })
+        return "$script:RemoteDisplayName · last usage change $changed · last checked $ageText ago" + $(if ($reading.Stale) { ' · ' + $reading.Notice } else { '' })
     }
     $enabled = if ($Kind -eq 'Write') { $script:WriteUsageEnabled } else { $script:ReadUsageEnabled }
     # Publishing follows its source switch; only importing depends on Shared being enabled.
@@ -261,7 +288,23 @@ function Get-SharingStatus {
     return "$Kind`: " + $(if ($last) { 'last completed ' + $last.ToLocalTime().ToString('h:mm:ss tt') } else { 'waiting' }) + " · $cadence"
 }
 
+function Set-LocalOnlyMode {
+    param([bool]$Enabled)
+    # Preserve individual source, read and write choices for easy restoration.
+    $script:LocalOnly = $Enabled
+    Update-SharingTimer
+    Update-ClaudeSharingTimer
+    # Reconcile attached and separate accounts before saving the pause.
+    Update-Display
+    Update-TrayIcon
+    Save-WidgetState
+    # Resume configured imports promptly when the pause is removed.
+    if (-not $Enabled) { Read-SharedUsage; Invoke-ClaudeSharing -Force; Update-Display; Update-TrayIcon }
+}
+
 function Invoke-SharingTick {
+    # Avoid all file work during local-only mode.
+    if ($script:LocalOnly) { return }
     # Check independent file timers even while the desktop window is minimized to the tray.
     if (-not $script:SharedEnabled -and -not $script:WriteUsageEnabled) { return }
     $now = [DateTimeOffset]::Now
@@ -336,6 +379,8 @@ function Save-SharedWarnings {
 }
 
 function Show-SharedUsageWarnings {
+    # Paused imported accounts must not issue notifications.
+    if ($script:LocalOnly) { return }
     # Only valid, sufficiently recent imported readings can produce second-account notifications.
     if (-not $script:SharedEnabled -or -not $script:ReadUsageEnabled -or -not $script:RemoteUsage -or $script:ReadError) { return }
     $age = [DateTimeOffset]::Now.ToUnixTimeSeconds() - $script:RemoteUsage.fetchedAt
