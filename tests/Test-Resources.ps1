@@ -39,50 +39,51 @@ Assert-Resource ([Math]::Abs($sample.Local.Cpu-(60/[Environment]::ProcessorCount
 $script:NoGpu=$true
 $sample=Get-AppResourceSnapshot -WidgetProcessId 20 -SessionId 2
 Assert-Resource ($null -eq $sample.Local.Gpu) 'Missing GPU support must remain unavailable.'
-# Use long values to check label removal, retained GPU, and disappearance before small quota views.
-$script:ResourceOptions.Local=$true
+# Retain all three readings even when the complete group must scale to a mini or thin view.
+$script:ResourceOptions.Local=$true; $script:ResourceOptions.Claude=$true
 $script:ResourceReadings.Local=@{Available=$true;Cpu=3;Memory=1280000000;Gpu=1;Count=3;SampledAt=[DateTimeOffset]::Now}
-$row=New-ResourceRow
-[void](Update-ResourceRow $row Local 280 300)
-Assert-Resource ($row.Items[0].Text -match 'CPU' -and $row.Panel.Visibility -eq 'Visible') 'Wide row should show labels.'
-[void](Update-ResourceRow $row Local 145 300)
-Assert-Resource ($row.Items[0].Text -notmatch 'CPU' -and $row.Items[2].Text -match '1%' -and $row.Panel.Visibility -eq 'Visible') ('Compact row should retain all three values without labels: '+($row.Items.Text -join ',')+'; '+$row.Panel.Visibility+'; width='+$row.Panel.DesiredSize.Width)
-[void](Update-ResourceRow $row Local 145 150)
-Assert-Resource ($row.Panel.Visibility -eq 'Collapsed') 'Short quota views should hide resources first.'
-# Long values must never overflow when even the smallest complete row does not fit.
-$script:ResourceReadings.Local.Memory=999999999999999999
-[void](Update-ResourceRow $row Local 105 300)
-Assert-Resource ($row.Panel.Visibility -eq 'Collapsed') 'A row that cannot fit all three values must collapse.'
-$script:ResourceReadings.Local.Memory=1280000000
-# Render connected panels with one enabled resource row and ensure equal reserved heights.
-$script:ClaudeOptions.Enabled=$true; $script:AccountLayout='Stacked'
-$script:ClaudeUsage=$script:Usage
-$window.Width=600; $window.Height=840; $window.Show(); Wait-TestDispatcher 100
-Update-Display
-Assert-Resource ($script:AccountCards.Local.Container.RowDefinitions[3].Height.Value -eq 20) 'Local card should reserve its resource row.'
-Assert-Resource ($script:AccountCards.Claude.Container.RowDefinitions[3].Height.Value -eq 20) 'Connected account rows should remain aligned.'
-# Side-by-side resources use width instead of height and survive a short horizontal view.
-$script:AccountLayout='Side by side'; $window.Width=600; $window.Height=150
-Wait-TestDispatcher 100; Update-Display
-$localCard=$script:AccountCards.Local; $claudeCard=$script:AccountCards.Claude
-Assert-Resource ($localCard.Resources.Panel.Orientation -eq 'Vertical' -and $localCard.Resources.Panel.Visibility -eq 'Visible') 'Short side-by-side view must retain all three resources vertically.'
-Assert-Resource ($localCard.Resources.Items[2].Text -match '1%') 'GPU must remain in the column.'
-Assert-Resource ($localCard.Container.ColumnDefinitions[1].Width.Value -eq $claudeCard.Container.ColumnDefinitions[1].Width.Value) 'Connected quota widths must reserve equal resource columns.'
-Assert-Resource ($localCard.Container.RowDefinitions[3].Height.Value -eq 0) 'Vertical resources must not consume quota height.'
-# Top-and-bottom accounts retain resource columns beside their horizontal quota values too.
-$script:AccountLayout='Stacked'; $script:ResourceOptions.Claude=$true
 $script:ResourceReadings.Claude=@{Available=$true;Cpu=2;Memory=610000000;Gpu=0;Count=3;SampledAt=[DateTimeOffset]::Now}
-$window.Width=600; $window.Height=300
-Wait-TestDispatcher 100; Update-Display
-foreach ($card in @($localCard,$claudeCard)) {
-    Assert-Resource ($card.Resources.Panel.Orientation -eq 'Vertical' -and $card.Resources.Panel.Visibility -eq 'Visible') 'Short stacked account should retain its vertical resources.'
-    Assert-Resource ($card.Container.RowDefinitions[3].Height.Value -eq 0) 'Stacked columns must not consume quota height.'
+$row=New-ResourceRow
+[void](Update-ResourceRow $row Local 110 300)
+Assert-Resource ($row.Items[0].Text -match 'CPU' -and $row.Host.Visibility -eq 'Visible') 'Labeled resources should be visible.'
+[void](Update-ResourceRow $row Local 30 50 -HideLabels)
+Assert-Resource ($row.Items[0].Text -eq '3%' -and $row.Items[1].Text -eq '1.28GB' -and $row.Items[2].Text -eq '1%' -and $row.Host.Visibility -eq 'Visible') 'Mini resources must retain all three values without labels.'
+[void](Update-ResourceRow $row Local 110 14 -HideLabels -SingleLine)
+Assert-Resource ($row.Host.Visibility -eq 'Visible' -and $row.Panel.Orientation -eq 'Horizontal') 'Thin views must retain the full resource group on one line.'
+# Check every connected layout through full, narrow, mini, and menu-height dimensions.
+$script:ClaudeOptions.Enabled=$true; $script:ClaudeUsage=$script:Usage
+$window.Show()
+foreach ($layout in @('Side by side','Stacked','Account picker')) {
+    $script:AccountLayout=$layout
+    foreach ($size in @(@(600,840),@(600,300),@(300,180),@(150,144),@(600,70))) {
+        $window.Width=$size[0]; $window.Height=$size[1]
+        Wait-TestDispatcher 50
+        foreach ($reading in $script:ResourceReadings.Values) {$reading.SampledAt=[DateTimeOffset]::Now}
+        Update-Display; $window.UpdateLayout()
+        $cards=if ($layout -eq 'Account picker') {@($script:AccountCards[$script:SelectedAccount])} else {@($script:AccountCards.Local,$script:AccountCards.Claude)}
+        foreach ($card in $cards) {
+            Assert-Resource ($card.Resources.Host.Visibility -eq 'Visible' -and $card.Resources.Items.Count -eq 3) ('Enabled readings disappeared in '+$layout+' at '+($size -join 'x'))
+            Assert-Resource ($card.Container.RowDefinitions[3].Height.Value -eq 0 -and $card.Container.ColumnDefinitions[1].Width.Value -gt 0) 'Persistent resource columns should consume only width.'
+            $bindings=$card.Bindings
+            $quotaLabels=$bindings.primaryArea.Visibility -eq 'Visible' -or ($bindings.ultraCompactPanel.Visibility -eq 'Visible' -and $bindings.compactPrimaryCaption.Visibility -eq 'Visible')
+            if ($bindings.inlineUsagePanel.Visibility -eq 'Visible') {$quotaLabels=$bindings.inlineUsagePanel.Child.Children[1].Visibility -eq 'Visible'}
+            Assert-Resource (($card.Resources.Items[0].Text -match 'CPU') -eq $quotaLabels) 'Resource names must follow the actual 5-hour label visibility.'
+            Assert-Resource ($card.Resources.Host.ActualWidth -le $card.Container.ColumnDefinitions[1].Width.Value+0.1 -and $card.Resources.Host.ActualHeight -gt 0) 'Resource group should stay inside its column with actual drawing height.'
+            foreach ($item in $card.Resources.Items) { Assert-Resource ($item.IsVisible -and $item.ActualWidth -gt 0 -and $item.ActualHeight -gt 0) 'Every hardware value must have visible text bounds.' }
+        }
+        if ($layout -ne 'Account picker') { Assert-Resource ($cards[0].Container.ColumnDefinitions[1].Width.Value -eq $cards[1].Container.ColumnDefinitions[1].Width.Value) 'Connected resource columns must stay aligned.' }
+    }
 }
-Assert-Resource ($localCard.Container.ColumnDefinitions[1].Width.Value -eq $claudeCard.Container.ColumnDefinitions[1].Width.Value) 'Stacked resource columns should align.'
-# Making stacked cards taller restores the footer without leaving an empty side column.
-$script:AccountLayout='Stacked'; $window.Width=600; $window.Height=840
-Wait-TestDispatcher 100; Update-Display
-Assert-Resource ($localCard.Resources.Panel.Orientation -eq 'Horizontal' -and $localCard.Container.ColumnDefinitions[1].Width.Value -eq 0) 'Stacked view should restore the horizontal footer.'
+# Detached Claude uses the same persistent column even at its mini size.
+$script:ClaudeOptions.Placement='Separate window'; Update-Display; Wait-TestDispatcher 50
+$script:ClaudeView.Window.Width=72; $script:ClaudeView.Window.Height=72
+Wait-TestDispatcher 50; Update-Display
+Assert-Resource ($script:AccountCards.Claude.Resources.Host.Visibility -eq 'Visible') 'Detached mini view must keep its resource group.'
+$script:ClaudeOptions.Placement='Follow layout'
+# A lone local account also keeps resources in its smallest supported window.
+$script:ClaudeOptions.Enabled=$false; $script:SharedEnabled=$false; $script:AccountLayout='Stacked'
+$window.Width=72; $window.Height=72; Wait-TestDispatcher 50; Update-Display
+Assert-Resource ($script:AccountCards.Local.Resources.Host.Visibility -eq 'Visible' -and $script:AccountCards.Local.Resources.Panel.Orientation -eq 'Vertical') 'Single-account mini view must retain hardware values in three rows.'
 Save-WidgetState
 $saved=Get-Content -LiteralPath (Join-Path $script:TestState 'widget-state.json') -Raw | ConvertFrom-Json
 Assert-Resource ($saved.resourceOptions.Local -eq $true) 'Resource switches should persist locally.'

@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.7.3 — October 11, 2026
+
+- Keep enabled CPU/RAM/GPU values visible at every widget size and in every account layout, replacing the disappearing footer with a persistent column. Labels follow the 5-hour label visibility; values scale together and keep memory units and hover help. Thin views use a single line.
+- Preserve equal quota widths across connected accounts and extend synthetic checks to full, narrow, mini, picker and menu-height views.
+
 ## 2.7.2 — October 11, 2026
 
 - Extend the vertical CPU/RAM/GPU column to wide, short top-and-bottom account panels. Keep their resource and quota columns aligned; taller stacked panels restore the existing footer.

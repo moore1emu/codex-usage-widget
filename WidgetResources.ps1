@@ -82,46 +82,38 @@ function New-ResourceRow {
         $text.Margin=[Windows.Thickness]::new(0,0,7,0); [void]$panel.Children.Add($text); $items+=$text
     }
     $items[2].Margin=[Windows.Thickness]::new(0)
-    return @{Panel=$panel;Items=$items}
+    # Scale the complete resource group at tiny sizes instead of hiding individual values.
+    $resourceHost=[Windows.Controls.Viewbox]::new(); $resourceHost.Child=$panel; $resourceHost.Stretch='Uniform'; $resourceHost.StretchDirection='DownOnly'
+    $resourceHost.VerticalAlignment='Center'; $resourceHost.Visibility='Collapsed'
+    return @{Panel=$panel;Host=$resourceHost;Items=$items}
 }
 
 function Update-ResourceRow {
-    param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$Vertical)
-    # Give subscription values and reset details priority when the widget becomes short.
-    $Row.Panel.Visibility='Collapsed'
-    # A side column needs only three text lines; the footer retains its original height budget.
-    $Row.Panel.Orientation=if ($Vertical) {'Vertical'} else {'Horizontal'}
-    $Row.Panel.VerticalAlignment=if ($Vertical) {'Center'} else {'Bottom'}
-    if (-not $script:ResourceOptions[$Key] -or $Height -lt $(if ($Vertical) {42} else {230}) -or $Width -lt $(if ($Vertical) {40} else {105})) { return 0 }
+    param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$HideLabels,[double]$FontSize=11,[switch]$SingleLine)
+    # Enabled hardware values persist through every layout; unavailable readings retain their placeholders.
+    $Row.Panel.Visibility='Collapsed'; $Row.Host.Visibility='Collapsed'
+    if (-not $script:ResourceOptions[$Key]) { return 0 }
     $reading=$script:ResourceReadings[$Key]
     $available=$reading.Available -and ([DateTimeOffset]::Now-$reading.SampledAt).TotalSeconds -lt 15
     $values=if ($available) { @('{0:0}%' -f $reading.Cpu; Format-ResourceMemory $reading.Memory; $(if ($null -ne $reading.Gpu) {'{0:0}%' -f $reading.Gpu} else {'—'})) } else {@('—','—','—')}
     $labels=@('CPU','RAM','GPU')
-    # Measure actual text rather than guessing width; remove words before reducing value size.
-    $Row.Panel.Visibility='Visible'
-    foreach ($style in @(@{Labels=$true;Size=11;Gap=7},@{Labels=$false;Size=11;Gap=4},@{Labels=$false;Size=9;Gap=2})) {
-        for ($index=0;$index -lt 3;$index++) {
-            $item=$Row.Items[$index]; $item.FontSize=$style.Size
-            # Vertical rows tighten their line spacing while keeping CPU, RAM, and GPU in order.
-            $item.Margin=if ($Vertical) {[Windows.Thickness]::new(0,0,0,$(if ($index -eq 2) {0} else {1}))} else {[Windows.Thickness]::new(0,0,$(if ($index -eq 2) {0} else {$style.Gap}),0)}
-            $item.Text='● '+$(if ($style.Labels) {$labels[$index]+' '} else {''})+$values[$index]
-            $item.ToolTip=$labels[$index]+': '+$values[$index]+$(if ($available) {"`nLocal desktop app and child processes: $($reading.Count)`nSampled $($reading.SampledAt.ToLocalTime().ToString('h:mm:ss tt'))"} else {"`nNo recent desktop resource reading"})
-        }
-        # Measure each changed text directly; unattached WPF parents can cache an earlier label width.
-        $measuredWidth=0.0; $measuredHeight=0.0
-        foreach ($item in $Row.Items) {
-            $item.InvalidateMeasure()
-            $item.Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
-            $measuredWidth=if ($Vertical) {[Math]::Max($measuredWidth,$item.DesiredSize.Width)} else {$measuredWidth+$item.DesiredSize.Width}
-            $measuredHeight+=$item.DesiredSize.Height
-        }
-        if ($measuredWidth -le $Width-6 -and (-not $Vertical -or $measuredHeight -le $Height-4)) {
-            $Row.Panel.Visibility='Visible'
-            return $(if ($Vertical) {[Math]::Ceiling($measuredWidth+8)} else {20})
-        }
+    # Follow the quota label stage, preserving units while compacting unnecessary spaces and dots.
+    for ($index=0;$index -lt 3;$index++) {
+        $item=$Row.Items[$index]; $item.FontSize=$FontSize
+        $item.FontWeight=if ($HideLabels) {'SemiBold'} else {'Normal'}
+        $item.Text=if ($HideLabels) {$values[$index] -replace ' ',''} else {'● '+$labels[$index]+' '+$values[$index]}
+        $item.ToolTip=$labels[$index]+': '+$values[$index]+$(if ($available) {"`nLocal desktop app and child processes: $($reading.Count)`nSampled $($reading.SampledAt.ToLocalTime().ToString('h:mm:ss tt'))"} else {"`nNo recent desktop resource reading"})
+        $item.Margin=[Windows.Thickness]::new(0,0,0,$(if ($index -eq 2) {0} else {1}))
     }
-    $Row.Panel.Visibility='Collapsed'
-    return 0
+    # A one-line widget keeps the three readings in one line too; taller cards stack them vertically.
+    $Row.Panel.Orientation=if ($SingleLine) {'Horizontal'} else {'Vertical'}
+    if ($Row.Panel.Orientation -eq 'Horizontal') {
+        for ($index=0;$index -lt 3;$index++) { $Row.Items[$index].Margin=[Windows.Thickness]::new(0,0,$(if ($index -eq 2) {0} else {3}),0) }
+    }
+    # Bound the whole group to its allocated column; uniform scaling keeps every number inside it.
+    $Row.Host.Width=[Math]::Max(1,$Width); $Row.Host.MaxHeight=[Math]::Max(1,$Height)
+    $Row.Panel.Visibility='Visible'; $Row.Host.Visibility='Visible'
+    return [Math]::Max(1,$Width)
 }
 
 function Stop-ResourceSampling {
