@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.7.4 — October 11, 2026
+
+- Match CPU, RAM and GPU to each local account's selected 5-hour, weekly and credits palette colors, including compact and detached views. Applying another palette updates the resource colors immediately.
+
 ## 2.7.3 — October 11, 2026
 
 - Keep enabled CPU/RAM/GPU values visible at every widget size and in every account layout, replacing the disappearing footer with a persistent column. Labels follow the 5-hour label visibility; values scale together and keep memory units and hover help. Thin views use a single line.

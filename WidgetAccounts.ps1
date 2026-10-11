@@ -197,7 +197,7 @@ function Render-AccountCard {
             $quotaLabels=$inlineUsagePanel.Child.Children[1].Visibility -eq 'Visible'
             $resourceFont=$inlineUsagePanel.Child.Children[2].FontSize
         }
-        [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $Height -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
+        [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $Height -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -Colors $colors -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
         # Keep account borders and actions in the shared window instead of duplicating them.
         $outerBorder.BorderThickness = [Windows.Thickness]::new(0)
     }

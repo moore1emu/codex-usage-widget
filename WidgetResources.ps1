@@ -77,8 +77,8 @@ function New-ResourceRow {
     $panel=[Windows.Controls.StackPanel]::new(); $panel.Orientation='Horizontal'
     $panel.HorizontalAlignment='Center'; $panel.Margin=[Windows.Thickness]::new(3,2,3,2); $panel.Visibility='Collapsed'
     $items=@()
-    foreach ($color in @('#669CFF','#A97BFF','#91B8B0')) {
-        $text=[Windows.Controls.TextBlock]::new(); $text.Foreground=$color; $text.FontSize=11
+    foreach ($metric in @('CPU','RAM','GPU')) {
+        $text=[Windows.Controls.TextBlock]::new(); $text.Foreground='#DDE3EF'; $text.FontSize=11
         $text.Margin=[Windows.Thickness]::new(0,0,7,0); [void]$panel.Children.Add($text); $items+=$text
     }
     $items[2].Margin=[Windows.Thickness]::new(0)
@@ -89,7 +89,7 @@ function New-ResourceRow {
 }
 
 function Update-ResourceRow {
-    param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$HideLabels,[double]$FontSize=11,[switch]$SingleLine)
+    param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$HideLabels,[double]$FontSize=11,[switch]$SingleLine,[string[]]$Colors)
     # Enabled hardware values persist through every layout; unavailable readings retain their placeholders.
     $Row.Panel.Visibility='Collapsed'; $Row.Host.Visibility='Collapsed'
     if (-not $script:ResourceOptions[$Key]) { return 0 }
@@ -100,6 +100,8 @@ function Update-ResourceRow {
     # Follow the quota label stage, preserving units while compacting unnecessary spaces and dots.
     for ($index=0;$index -lt 3;$index++) {
         $item=$Row.Items[$index]; $item.FontSize=$FontSize
+        # Follow this account's quota palette: CPU uses 5-hour, RAM weekly, and GPU credits.
+        if ($Colors.Count -eq 3) { $item.Foreground=$Colors[$index] }
         $item.FontWeight=if ($HideLabels) {'SemiBold'} else {'Normal'}
         $item.Text=if ($HideLabels) {$values[$index] -replace ' ',''} else {'● '+$labels[$index]+' '+$values[$index]}
         $item.ToolTip=$labels[$index]+': '+$values[$index]+$(if ($available) {"`nLocal desktop app and child processes: $($reading.Count)`nSampled $($reading.SampledAt.ToLocalTime().ToString('h:mm:ss tt'))"} else {"`nNo recent desktop resource reading"})
