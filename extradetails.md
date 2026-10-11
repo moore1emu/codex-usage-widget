@@ -2,7 +2,7 @@
 
 [Quick start and screenshots](README.md) · [Changelog](changelog.md)
 
-This guide covers AI Usage Widget 2.7.1.
+This guide covers AI Usage Widget 2.7.2.
 
 For development checks, see [tests/README.md](tests/README.md). The regression runner uses temporary state and example readings without accessing a live account.
 
@@ -180,6 +180,6 @@ Enable **Show local CPU / RAM / GPU** independently in the local Codex and Claud
 
 Totals include the installed desktop app and its child processes. The widget and its helpers, ChatGPT Classic, unrelated browsers and other applications are excluded. CPU is normalized across logical processors; RAM sums private working sets, avoiding shared-page double counting. GPU reports the busiest physical engine after summing that app's processes within each engine. Task Manager may use different grouping or sampling, so momentary readings can differ.
 
-RAM uses decimal MB and switches to GB above 1,000 MB, with two decimal places. Colored dots identify CPU (blue), RAM (purple), and GPU (sage). Narrow rows remove labels before shrinking values; hover identifies each value. Side-by-side and wide, short cards use an extra column with CPU, RAM and GPU stacked vertically; it stays visible while three text lines fit, without taking height from quota details. Stacked cards keep the footer and hide it before displacing quota bars or reset schedules. Connected accounts reserve equal space, but imported accounts never display this computer's hardware readings.
+RAM uses decimal MB and switches to GB above 1,000 MB, with two decimal places. Colored dots identify CPU (blue), RAM (purple), and GPU (sage). Narrow rows remove labels before shrinking values; hover identifies each value. Side-by-side and wide, short cards use an extra column with CPU, RAM and GPU stacked vertically; it stays visible while three text lines fit, without taking height from quota details. Taller stacked cards keep the footer and hide it before displacing quota bars or reset schedules. Connected accounts reserve equal space, but imported accounts never display this computer's hardware readings.
 
 Stopped or inaccessible apps, unsupported GPU counters, collection failures, and readings older than 15 seconds show a dash rather than an invented value. The feature recognizes the installed Windows desktop packages; developer API usage and remote server resources are not measured. No resource values or process identities are written to sharing files.

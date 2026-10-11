@@ -6,7 +6,7 @@ A small Windows desktop and tray widget for **Codex and Claude subscription usag
 
 Use **Local only (pause sharing)** in the tray menu to hide shared accounts and pause all JSON reads and writes. Switch it off to restore saved connections. The pause survives restarts.
 
-**Version 2.7.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.7.2** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -57,7 +57,7 @@ For Claude, enable it in **Settings → Claude**, click **Apply**, then **Connec
 
 Widget screenshots show captured real usage readings; settings screenshots show the current release. Account names are neutral and private file paths are replaced with placeholders. Settings stay local to each computer. Shared accounts show **Stale** after 31 minutes without a publisher check-in. After 1 hour, the values disappear and **Last refresh X hours ago** remains; hover to see the last calculated values and time. Fresh check-ins restore the values.
 
-Optional **Show local CPU / RAM / GPU** switches in the local Codex and Claude tabs add desktop resource readings. Side-by-side and wide, short views stack CPU, RAM and GPU in an extra column. Labels shrink before values, and RAM switches to GB above 1,000 MB. These readings stay local.
+Optional **Show local CPU / RAM / GPU** switches in the local Codex and Claude tabs add desktop resource readings. Side-by-side and wide, short views (including top-and-bottom accounts) stack CPU, RAM and GPU in an extra column. Labels shrink before values, and RAM switches to GB above 1,000 MB. These readings stay local.
 
 ## Disclaimer
 

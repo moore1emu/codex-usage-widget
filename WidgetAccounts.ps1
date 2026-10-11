@@ -325,18 +325,22 @@ function Update-AccountViews {
             if ($creditMode -eq 'Always' -or ($creditMode -eq 'Available' -and ($creditSnapshot.credits.unlimited -eq $true -or ($hasBalance -and $balance -gt 0)))) { $reserveCredits = $true }
         }
     }
+    # Wide, short stacked cards use the same resource column as side-by-side cards.
+    $resourceCardHeight=if ($script:AccountLayout -eq 'Stacked' -and $keys.Count) {($height-($keys.Count-1))/$keys.Count} else {$height}
+    $resourceHeading=if ($keys.Count) {Set-AccountHeadingSize $script:AccountCards[$keys[0]] $width $resourceCardHeight} else {0}
+    $stackedResourceColumns=$script:AccountLayout -eq 'Stacked' -and $width -ge 300 -and ($resourceCardHeight-$resourceHeading) -le 120
     # Share only presentation measurements; separate windows and other layouts remain independent.
     $sharedLayout = if ($script:AccountLayout -in @('Side by side','Stacked') -and $keys.Count -gt 1) {
-        @{ResourceColumns=($script:AccountLayout -eq 'Side by side');ResourceWidth=0;ResourcesFit=$true;ResourceHeight=0;Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
+        @{ResourceColumns=($script:AccountLayout -eq 'Side by side' -or $stackedResourceColumns);ResourceWidth=0;ResourcesFit=$true;ResourceHeight=0;Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
     } else { $null }
     # Measure all resource columns first so every quota probe uses the same remaining width.
     if ($sharedLayout.ResourceColumns) {
-        $columnCardWidth=($width-($keys.Count-1))/$keys.Count
+        $columnCardWidth=if ($script:AccountLayout -eq 'Stacked') {$width} else {($width-($keys.Count-1))/$keys.Count}
         foreach ($key in @('Local','Claude')) {
             if ($key -notin $keys) { continue }
             $card=$script:AccountCards[$key]
-            $columnHeading=Set-AccountHeadingSize $card $columnCardWidth $height
-            $measuredColumn=Update-ResourceRow -Row $card.Resources -Key $key -Width ([Math]::Min(110,$columnCardWidth-90)) -Height ($height-$columnHeading) -Vertical
+            $columnHeading=Set-AccountHeadingSize $card $columnCardWidth $resourceCardHeight
+            $measuredColumn=Update-ResourceRow -Row $card.Resources -Key $key -Width ([Math]::Min(110,$columnCardWidth-90)) -Height ($resourceCardHeight-$columnHeading) -Vertical
             $sharedLayout.ResourceWidth=[Math]::Max([double]$sharedLayout.ResourceWidth,$measuredColumn)
         }
     }

@@ -69,7 +69,17 @@ Assert-Resource ($localCard.Resources.Panel.Orientation -eq 'Vertical' -and $loc
 Assert-Resource ($localCard.Resources.Items[2].Text -match '1%') 'GPU must remain in the column.'
 Assert-Resource ($localCard.Container.ColumnDefinitions[1].Width.Value -eq $claudeCard.Container.ColumnDefinitions[1].Width.Value) 'Connected quota widths must reserve equal resource columns.'
 Assert-Resource ($localCard.Container.RowDefinitions[3].Height.Value -eq 0) 'Vertical resources must not consume quota height.'
-# Switching back to stacked cards restores the footer, without leaving an empty side column.
+# Top-and-bottom accounts retain resource columns beside their horizontal quota values too.
+$script:AccountLayout='Stacked'; $script:ResourceOptions.Claude=$true
+$script:ResourceReadings.Claude=@{Available=$true;Cpu=2;Memory=610000000;Gpu=0;Count=3;SampledAt=[DateTimeOffset]::Now}
+$window.Width=600; $window.Height=300
+Wait-TestDispatcher 100; Update-Display
+foreach ($card in @($localCard,$claudeCard)) {
+    Assert-Resource ($card.Resources.Panel.Orientation -eq 'Vertical' -and $card.Resources.Panel.Visibility -eq 'Visible') 'Short stacked account should retain its vertical resources.'
+    Assert-Resource ($card.Container.RowDefinitions[3].Height.Value -eq 0) 'Stacked columns must not consume quota height.'
+}
+Assert-Resource ($localCard.Container.ColumnDefinitions[1].Width.Value -eq $claudeCard.Container.ColumnDefinitions[1].Width.Value) 'Stacked resource columns should align.'
+# Making stacked cards taller restores the footer without leaving an empty side column.
 $script:AccountLayout='Stacked'; $window.Width=600; $window.Height=840
 Wait-TestDispatcher 100; Update-Display
 Assert-Resource ($localCard.Resources.Panel.Orientation -eq 'Horizontal' -and $localCard.Container.ColumnDefinitions[1].Width.Value -eq 0) 'Stacked view should restore the horizontal footer.'

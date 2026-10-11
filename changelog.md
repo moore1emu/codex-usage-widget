@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.7.2 — October 11, 2026
+
+- Extend the vertical CPU/RAM/GPU column to wide, short top-and-bottom account panels. Keep their resource and quota columns aligned; taller stacked panels restore the existing footer.
+
 ## 2.7.1 — October 11, 2026
 
 - Keep CPU, RAM and GPU together in an extra vertical column in side-by-side and wide, short account views. The column survives shorter windows, drops labels before values, and preserves equal quota widths across connected panels. Stacked views retain the existing footer.
