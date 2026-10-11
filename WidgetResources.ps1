@@ -103,7 +103,7 @@ function Update-ResourceRow {
         # Follow this account's quota palette: CPU uses 5-hour, RAM weekly, and GPU credits.
         if ($Colors.Count -eq 3) { $item.Foreground=$Colors[$index] }
         $item.FontWeight=if ($HideLabels) {'SemiBold'} else {'Normal'}
-        $item.Text=if ($HideLabels) {$values[$index] -replace ' ',''} else {'● '+$labels[$index]+' '+$values[$index]}
+        $item.Text=if ($HideLabels) {$values[$index] -replace ' ',''} else {$labels[$index]+' '+$values[$index]}
         $item.ToolTip=$labels[$index]+': '+$values[$index]+$(if ($available) {"`nLocal desktop app and child processes: $($reading.Count)`nSampled $($reading.SampledAt.ToLocalTime().ToString('h:mm:ss tt'))"} else {"`nNo recent desktop resource reading"})
         $item.Margin=[Windows.Thickness]::new(0,0,0,$(if ($index -eq 2) {0} else {1}))
     }

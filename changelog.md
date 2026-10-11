@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.7.5 — October 11, 2026
+
+- Match compact quota readings to the enabled CPU/RAM/GPU column: colored 5-hour, Weekly and Credits labels beside their values, retaining countdowns underneath while space permits. Narrow cards drop labels together; full bars and menu-height lines retain their existing layout.
+- Remove decorative bullets from hardware readings.
+
 ## 2.7.4 — October 11, 2026
 
 - Match CPU, RAM and GPU to each local account's selected 5-hour, weekly and credits palette colors, including compact and detached views. Applying another palette updates the resource colors immediately.

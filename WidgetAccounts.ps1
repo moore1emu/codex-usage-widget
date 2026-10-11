@@ -41,7 +41,77 @@ function New-AccountCard {
     $resources=New-ResourceRow
     [Windows.Controls.Grid]::SetRow($resources.Host,3)
     [void]$container.Children.Add($resources.Host)
-    return @{ Resources=$resources; Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
+    # Remember original children so each resize starts from the tested quota controls.
+    $compactRows=@()
+    foreach ($pair in @(@('compactPrimaryCaption','compactPrimaryPercent'),@('compactSecondaryCaption','compactSecondaryPercent'),@('compactCreditsCaption','compactCreditsText'))) {
+        $parent=$bindings[$pair[1]].Parent
+        $compactRows+=@{Parent=$parent;Children=@($parent.Children);Caption=$bindings[$pair[0]];Value=$bindings[$pair[1]];Line=[Windows.Controls.StackPanel]::new()}
+    }
+    return @{ CompactRows=$compactRows; Resources=$resources; Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
+}
+
+function Restore-CompactAccountRows {
+    param($Card)
+    # Undo presentation wrappers before the renderer measures and rearranges its controls.
+    foreach ($row in $Card.CompactRows) {
+        $row.Line.Children.Clear()
+        $row.Parent.Children.Clear()
+        foreach ($child in $row.Children) { [void]$row.Parent.Children.Add($child) }
+        $row.Caption.Margin=[Windows.Thickness]::new(0)
+        $row.Parent.Margin=[Windows.Thickness]::new(0)
+    }
+}
+
+function Show-CompactAccountRows {
+    param($Card,[double]$Width,[double]$Height,[string[]]$Colors)
+    # Match compact quotas to the enabled hardware column, preserving resource-free horizontal views and menu-height lines.
+    if ($Card.Bindings.ultraCompactPanel.Visibility -ne 'Visible' -or $Card.Container.ColumnDefinitions[1].Width.Value -le 0) { return }
+    $grid=$Card.Bindings.ultraCompactPanel.Child
+    $grid.ColumnDefinitions.Clear(); $grid.RowDefinitions.Clear()
+    foreach ($row in $Card.CompactRows) { $definition=[Windows.Controls.RowDefinition]::new(); $definition.Height=[Windows.GridLength]::Auto; [void]$grid.RowDefinitions.Add($definition) }
+    $measure=[Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity)
+    $font=$Card.Bindings.compactPrimaryPercent.FontSize
+    # Fit the new vertical group rather than reusing the old horizontal track height.
+    $resets=@($Card.Bindings.compactPrimaryReset,$Card.Bindings.compactSecondaryReset)
+    while ($font -ge 10) {
+        $needed=0
+        foreach ($row in $Card.CompactRows) {
+            $row.Value.FontSize=$font; $row.Value.Measure($measure)
+            if ($row.Parent.Visibility -ne 'Collapsed') { $needed+=$row.Value.DesiredSize.Height+1 }
+        }
+        foreach ($reset in $resets) { $reset.Measure($measure); if ($reset.Visibility -eq 'Visible') { $needed+=$reset.DesiredSize.Height } }
+        if ($needed+12 -le $Height -or $font -eq 10) { break }
+        $font--
+    }
+    # Preserve countdowns while they physically fit below all retained values.
+    if ($needed+12 -gt $Height) { foreach ($reset in $resets) { $reset.Visibility='Collapsed' } }
+    $required=0
+    # Measure complete rows at the current numeric size, hiding all labels together if they cannot fit.
+    for ($index=0;$index -lt 3;$index++) {
+        $row=$Card.CompactRows[$index]
+        $row.Caption.FontSize=$font; $row.Caption.Foreground=$Colors[$index]
+        $row.Caption.Visibility='Visible'
+        $row.Caption.Measure($measure); $row.Value.Measure($measure)
+        if ($row.Parent.Visibility -ne 'Collapsed') { $required=[Math]::Max($required,$row.Caption.DesiredSize.Width+$row.Value.DesiredSize.Width+5) }
+    }
+    # Use the widest connected account so all panels drop labels together.
+    if ($script:SharedAccountLayout) {
+        if ($script:ProbingAccountLayout) { $script:SharedAccountLayout.CompactRowWidth=[Math]::Max([double]$script:SharedAccountLayout.CompactRowWidth,$required) }
+        else { $required=[double]$script:SharedAccountLayout.CompactRowWidth }
+    }
+    $showLabels=$required+12 -le $Width
+    # Leave countdowns beneath their quota row and keep Credits beside its balance.
+    for ($index=0;$index -lt 3;$index++) {
+        $row=$Card.CompactRows[$index]
+        $row.Parent.Children.Remove($row.Caption); $row.Parent.Children.Remove($row.Value)
+        $row.Line.Orientation='Horizontal'; $row.Line.HorizontalAlignment='Center'
+        $row.Caption.Visibility=if ($showLabels) {'Visible'} else {'Collapsed'}
+        $row.Caption.Margin=[Windows.Thickness]::new(0,0,5,0)
+        [void]$row.Line.Children.Add($row.Caption); [void]$row.Line.Children.Add($row.Value)
+        $row.Parent.Children.Insert(0,$row.Line)
+        $row.Parent.VerticalAlignment='Center'; $row.Parent.Margin=[Windows.Thickness]::new(0,0,0,1)
+        [Windows.Controls.Grid]::SetRow($row.Parent,$index); [Windows.Controls.Grid]::SetColumn($row.Parent,0)
+    }
 }
 
 function Initialize-AccountViews {
@@ -189,7 +259,10 @@ function Render-AccountCard {
         foreach ($control in @($primaryPercent,$primaryBar,$compactPrimaryPercent)) { $control.Foreground = $colors[0] }
         foreach ($control in @($secondaryPercent,$secondaryBar,$compactSecondaryPercent)) { $control.Foreground = $colors[1] }
         foreach ($control in @($creditsText,$compactCreditsText)) { $control.Foreground = $colors[2] }
+        # Restore original children before measuring another width or height.
+        Restore-CompactAccountRows $Card
         Update-Display
+        Show-CompactAccountRows -Card $Card -Width $window.ActualWidth -Height $window.ActualHeight -Colors $colors
         # Hardware labels follow the same stage as the account's 5-hour label or caption.
         $quotaLabels=$primaryArea.Visibility -eq 'Visible' -or ($ultraCompactPanel.Visibility -eq 'Visible' -and $compactPrimaryCaption.Visibility -eq 'Visible')
         $resourceFont=if ($primaryArea.Visibility -eq 'Visible') {$primaryPercent.FontSize} else {$compactPrimaryPercent.FontSize}

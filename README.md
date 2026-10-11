@@ -6,7 +6,7 @@ A small Windows desktop and tray widget for **Codex and Claude subscription usag
 
 Use **Local only (pause sharing)** in the tray menu to hide shared accounts and pause all JSON reads and writes. Switch it off to restore saved connections. The pause survives restarts.
 
-**Version 2.7.4** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.7.5** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -30,7 +30,9 @@ Percentages show **quota remaining**: 100% is full and 0% is exhausted. Credits 
 | --- | --- | --- | --- |
 | <img src="docs/screenshots/widget-mini.png" alt="Mini widget" width="72"> | <img src="docs/screenshots/widget-small.png" alt="Small widget" width="140"> | <img src="docs/screenshots/widget-medium.png" alt="Medium widget" width="190"> | <img src="docs/screenshots/widget-large.png" alt="Large widget" width="280"> |
 
-Resize wide and short for horizontal metrics, or shrink to menu-bar height for one stationary line: account name, 5-hour percentage/countdown, weekly percentage/countdown, and available credits. Narrowing hides countdowns first, then metric labels; making it taller restores the usual rows. Connected side-by-side and stacked panels share spacing and display transitions.
+With local CPU/RAM/GPU enabled, compact account cards use stacked, colored label/value rows for 5-hour, weekly and credits, with countdowns underneath while space permits. Narrow cards drop the labels together.
+
+Resize wide and short for horizontal metrics when resources are off, or shrink to menu-bar height for one stationary line: account name, 5-hour percentage/countdown, weekly percentage/countdown, and available credits. Narrowing hides countdowns first, then metric labels; making it taller restores the usual rows. Connected side-by-side and stacked panels share spacing and display transitions.
 
 Drag to move; hover to resize from either bottom corner. Use **↻** to refresh, **◉ / ○** for always on top, **—** to minimize to the tray, and **×** to exit (hide just that account in Separate windows). Hidden buttons appear on hover. Double-click the tray icon to restore the window; hover for local quota and available credits.
 

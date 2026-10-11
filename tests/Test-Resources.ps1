@@ -45,7 +45,7 @@ $script:ResourceReadings.Local=@{Available=$true;Cpu=3;Memory=1280000000;Gpu=1;C
 $script:ResourceReadings.Claude=@{Available=$true;Cpu=2;Memory=610000000;Gpu=0;Count=3;SampledAt=[DateTimeOffset]::Now}
 $row=New-ResourceRow
 [void](Update-ResourceRow $row Local 110 300)
-Assert-Resource ($row.Items[0].Text -match 'CPU' -and $row.Host.Visibility -eq 'Visible') 'Labeled resources should be visible.'
+Assert-Resource ($row.Items[0].Text -eq 'CPU 3%' -and $row.Host.Visibility -eq 'Visible') 'Labeled resources should be visible.'
 [void](Update-ResourceRow $row Local 30 50 -HideLabels)
 Assert-Resource ($row.Items[0].Text -eq '3%' -and $row.Items[1].Text -eq '1.28GB' -and $row.Items[2].Text -eq '1%' -and $row.Host.Visibility -eq 'Visible') 'Mini resources must retain all three values without labels.'
 [void](Update-ResourceRow $row Local 110 14 -HideLabels -SingleLine)
@@ -67,6 +67,14 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
             $bindings=$card.Bindings
             $quotaLabels=$bindings.primaryArea.Visibility -eq 'Visible' -or ($bindings.ultraCompactPanel.Visibility -eq 'Visible' -and $bindings.compactPrimaryCaption.Visibility -eq 'Visible')
             if ($bindings.inlineUsagePanel.Visibility -eq 'Visible') {$quotaLabels=$bindings.inlineUsagePanel.Child.Children[1].Visibility -eq 'Visible'}
+            # Check the visible row structure after repeated transitions, not just formatted strings.
+            if ($bindings.ultraCompactPanel.Visibility -eq 'Visible') {
+                Assert-Resource ($bindings.ultraCompactPanel.Child.ColumnDefinitions.Count -eq 0) 'Compact quotas should use stacked rows.'
+                foreach ($quota in $card.CompactRows) {
+                    Assert-Resource ($quota.Line.Children.Count -eq 2 -and $quota.Value.Parent -eq $quota.Line) 'Compact labels and values must remain together after resizing.'
+                }
+                Assert-Resource ($bindings.compactPrimaryCaption.FontSize -eq $bindings.compactPrimaryPercent.FontSize) 'Compact labels should match their numeric font size.'
+            }
             Assert-Resource (($card.Resources.Items[0].Text -match 'CPU') -eq $quotaLabels) 'Resource names must follow the actual 5-hour label visibility.'
             Assert-Resource ($card.Resources.Host.ActualWidth -le $card.Container.ColumnDefinitions[1].Width.Value+0.1 -and $card.Resources.Host.ActualHeight -gt 0) 'Resource group should stay inside its column with actual drawing height.'
             foreach ($item in $card.Resources.Items) { Assert-Resource ($item.IsVisible -and $item.ActualWidth -gt 0 -and $item.ActualHeight -gt 0) 'Every hardware value must have visible text bounds.' }
