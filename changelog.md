@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.7.7 — October 12, 2026
+
+- Give CPU, RAM and GPU readings a consistent left edge while preserving their quota-row alignment and independent scaling in narrow windows.
+
 ## 2.7.6 — October 12, 2026
 
 - Align CPU with 5-hour, RAM with Weekly and GPU with the Credits position in full and compact views, including an empty credit track for Claude. Scale each hardware value independently without moving its row; menu-height views retain their single line.

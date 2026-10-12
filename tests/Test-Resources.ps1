@@ -84,6 +84,9 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
                 for ($index=0;$index -lt 3;$index++) {
                     $item=$card.Resources.Items[$index]
                     $actual=$item.TranslatePoint([Windows.Point]::new(0,$item.ActualHeight/2),$card.Container).Y
+                    # Text with different lengths must start at the same hardware-column edge.
+                    $left=$item.TranslatePoint([Windows.Point]::new(0,0),$card.Resources.Host).X
+                    Assert-Resource ([Math]::Abs($left-3) -lt 1) 'CPU, RAM and GPU should share the same left edge.'
                     if ($index -eq 2 -and $bindings.creditsArea.Visibility -ne 'Visible' -and $bindings.ultraCompactPanel.Visibility -ne 'Visible') {
                         $grid=$bindings.outerBorder.Child
                         Assert-Resource ($grid.RowDefinitions[3].ActualHeight -ge 27) 'GPU needs a reserved credit track when no balance exists.'

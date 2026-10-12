@@ -155,7 +155,9 @@ function Set-ResourceRowAlignment {
             $center=$target.TranslatePoint([Windows.Point]::new(0,$height/2),$row.Host).Y
         }
         # Position only when geometry changes, avoiding another layout cycle on steady countdown ticks.
-        $box=$row.Boxes[$index]; $width=[Math]::Max(1,$row.Host.ActualWidth-6)
+        # Size each scale box to its text so shorter CPU/GPU readings share RAM's left edge.
+        $row.Items[$index].Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
+        $box=$row.Boxes[$index]; $width=[Math]::Max(1,[Math]::Min($row.Items[$index].DesiredSize.Width,$row.Host.ActualWidth-6))
         if ([Math]::Abs($box.Width-$width) -gt 0.1 -or [double]::IsNaN($box.Width)) { $box.Width=$width }
         if ([Math]::Abs($box.Height-$height) -gt 0.1 -or [double]::IsNaN($box.Height)) { $box.Height=$height }
         $position=$center-$height/2
