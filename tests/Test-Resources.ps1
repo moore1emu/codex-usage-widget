@@ -55,7 +55,7 @@ $script:ClaudeOptions.Enabled=$true; $script:ClaudeUsage=$script:Usage
 $window.Show()
 foreach ($layout in @('Side by side','Stacked','Account picker')) {
     $script:AccountLayout=$layout
-    foreach ($size in @(@(600,840),@(600,300),@(300,180),@(150,144),@(600,70))) {
+    foreach ($size in @(@(600,840),@(490,604),@(600,300),@(360,240),@(300,180),@(150,144),@(600,70))) {
         $window.Width=$size[0]; $window.Height=$size[1]
         Wait-TestDispatcher 50
         foreach ($reading in $script:ResourceReadings.Values) {$reading.SampledAt=[DateTimeOffset]::Now}
@@ -78,6 +78,22 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
             Assert-Resource (($card.Resources.Items[0].Text -match 'CPU') -eq $quotaLabels) 'Resource names must follow the actual 5-hour label visibility.'
             Assert-Resource ($card.Resources.Host.ActualWidth -le $card.Container.ColumnDefinitions[1].Width.Value+0.1 -and $card.Resources.Host.ActualHeight -gt 0) 'Resource group should stay inside its column with actual drawing height.'
             foreach ($item in $card.Resources.Items) { Assert-Resource ($item.IsVisible -and $item.ActualWidth -gt 0 -and $item.ActualHeight -gt 0) 'Every hardware value must have visible text bounds.' }
+            # Compare actual drawn centers after WPF transforms, including narrow RAM scaling.
+            if ($card.Resources.Aligned.Visibility -eq 'Visible') {
+                $targets=if ($bindings.ultraCompactPanel.Visibility -eq 'Visible') { @($bindings.compactPrimaryPercent,$bindings.compactSecondaryPercent,$bindings.compactCreditsText) } else { @($bindings.primaryPercent,$bindings.secondaryPercent,$bindings.creditsText) }
+                for ($index=0;$index -lt 3;$index++) {
+                    $item=$card.Resources.Items[$index]
+                    $actual=$item.TranslatePoint([Windows.Point]::new(0,$item.ActualHeight/2),$card.Container).Y
+                    if ($index -eq 2 -and $bindings.creditsArea.Visibility -ne 'Visible' -and $bindings.ultraCompactPanel.Visibility -ne 'Visible') {
+                        $grid=$bindings.outerBorder.Child
+                        Assert-Resource ($grid.RowDefinitions[3].ActualHeight -ge 27) 'GPU needs a reserved credit track when no balance exists.'
+                        $top=0; for ($track=0;$track -lt 3;$track++) { $top+=$grid.RowDefinitions[$track].ActualHeight }
+                        $expected=$grid.TranslatePoint([Windows.Point]::new(0,$top+13.5),$card.Container).Y
+                    } else { $expected=$targets[$index].TranslatePoint([Windows.Point]::new(0,$targets[$index].ActualHeight/2),$card.Container).Y }
+                    Assert-Resource ([Math]::Abs($actual-$expected) -lt 1) ('Hardware reading is not aligned to its quota row: '+$index+' in '+$layout+' at '+($size -join 'x'))
+                }
+            }
+
         }
         if ($layout -ne 'Account picker') { Assert-Resource ($cards[0].Container.ColumnDefinitions[1].Width.Value -eq $cards[1].Container.ColumnDefinitions[1].Width.Value) 'Connected resource columns must stay aligned.' }
     }
@@ -87,6 +103,16 @@ $script:ClaudeOptions.Placement='Separate window'; Update-Display; Wait-TestDisp
 $script:ClaudeView.Window.Width=72; $script:ClaudeView.Window.Height=72
 Wait-TestDispatcher 50; Update-Display
 Assert-Resource ($script:AccountCards.Claude.Resources.Host.Visibility -eq 'Visible') 'Detached mini view must keep its resource group.'
+# Verify detached mini readings line up too, rather than only checking their visibility.
+$script:ClaudeView.Window.UpdateLayout()
+$detached=$script:AccountCards.Claude
+for ($index=0;$index -lt 3;$index++) {
+    $item=$detached.Resources.Items[$index]; $value=$detached.CompactRows[$index].Value
+    $actual=$item.TranslatePoint([Windows.Point]::new(0,$item.ActualHeight/2),$detached.Container).Y
+    $expected=$value.TranslatePoint([Windows.Point]::new(0,$value.ActualHeight/2),$detached.Container).Y
+    Assert-Resource ([Math]::Abs($actual-$expected) -lt 1) 'Detached hardware readings must follow their compact quota rows.'
+}
+
 $script:ClaudeOptions.Placement='Follow layout'
 # A lone local account also keeps resources in its smallest supported window.
 $script:ClaudeOptions.Enabled=$false; $script:SharedEnabled=$false; $script:AccountLayout='Stacked'

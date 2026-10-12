@@ -47,7 +47,10 @@ function New-AccountCard {
         $parent=$bindings[$pair[1]].Parent
         $compactRows+=@{Parent=$parent;Children=@($parent.Children);Caption=$bindings[$pair[0]];Value=$bindings[$pair[1]];Line=[Windows.Controls.StackPanel]::new()}
     }
-    return @{ CompactRows=$compactRows; Resources=$resources; Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
+    $card=@{ CompactRows=$compactRows; Resources=$resources; Container=$container; Visual=$visual; Bindings=$bindings; Heading=$heading; Status=$status; HeadingPanel=$headingPanel;AgeNotice=$ageNotice }
+    # Align resource values after WPF finishes arranging the actual quota rows.
+    $container.Add_LayoutUpdated({ Set-ResourceRowAlignment -Card $card }.GetNewClosure())
+    return $card
 }
 
 function Restore-CompactAccountRows {
@@ -233,8 +236,8 @@ function Render-AccountCard {
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
         $script:RenderingAccountCard = $true
-        # Keep weekly rows level with adjacent Codex cards that display credits.
-        $script:ReserveCreditRow = [bool]$ReserveCreditRow
+        # Keep GPU on a credit track even when this account has no balance.
+        $script:ReserveCreditRow = [bool]$ReserveCreditRow -or [bool]$script:ResourceOptions[$resourceKey]
         # Measure connected columns first, then apply the same fit decisions to every account.
         $script:SharedAccountLayout = $SharedLayout
         $script:ProbingAccountLayout = [bool]$ProbeLayout
@@ -271,6 +274,8 @@ function Render-AccountCard {
             $resourceFont=$inlineUsagePanel.Child.Children[2].FontSize
         }
         [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $Height -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -Colors $colors -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
+        # Match CPU/RAM/GPU to the quota tracks instead of centering them as an unrelated cluster.
+        if ($Card.Resources.Host.Visibility -eq 'Visible' -and $inlineUsagePanel.Visibility -ne 'Visible') { Enable-AlignedResourceRows $Card.Resources }
         # Keep account borders and actions in the shared window instead of duplicating them.
         $outerBorder.BorderThickness = [Windows.Thickness]::new(0)
     }
@@ -372,6 +377,8 @@ function Update-AccountViews {
             if ($creditMode -eq 'Always' -or ($creditMode -eq 'Available' -and ($creditSnapshot.credits.unlimited -eq $true -or ($hasBalance -and $balance -gt 0)))) { $reserveCredits = $true }
         }
     }
+    # Reserve the GPU/credit track across connected cards without displaying a missing balance.
+    if (('Local' -in $keys -and $script:ResourceOptions.Local) -or ('Claude' -in $keys -and $script:ResourceOptions.Claude)) { $reserveCredits=$true }
     # Keep the existing connected quota measurements and reserve hardware width independently of size.
     $sharedLayout = if ($script:AccountLayout -in @('Side by side','Stacked') -and $keys.Count -gt 1) {
         $resourceEnabled=('Local' -in $keys -and $script:ResourceOptions.Local) -or ('Claude' -in $keys -and $script:ResourceOptions.Claude)

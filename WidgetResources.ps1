@@ -85,13 +85,27 @@ function New-ResourceRow {
     # Scale the complete resource group at tiny sizes instead of hiding individual values.
     $resourceHost=[Windows.Controls.Viewbox]::new(); $resourceHost.Child=$panel; $resourceHost.Stretch='Uniform'; $resourceHost.StretchDirection='DownOnly'
     $resourceHost.VerticalAlignment='Center'; $resourceHost.Visibility='Collapsed'
-    return @{Panel=$panel;Host=$resourceHost;Items=$items}
+    # Give normal rows independent scale boxes so long RAM text cannot shift the other row positions.
+    $aligned=[Windows.Controls.Canvas]::new(); $aligned.Visibility='Collapsed'
+    $boxes=@()
+    for ($index=0;$index -lt 3;$index++) {
+        $box=[Windows.Controls.Viewbox]::new(); $box.Stretch='Uniform'; $box.StretchDirection='DownOnly'
+        [void]$aligned.Children.Add($box); $boxes+=$box
+    }
+    $container=[Windows.Controls.Grid]::new(); $container.Visibility='Collapsed'
+    [void]$container.Children.Add($resourceHost); [void]$container.Children.Add($aligned)
+    return @{Panel=$panel;Host=$container;Group=$resourceHost;Aligned=$aligned;Boxes=$boxes;Items=$items}
 }
 
 function Update-ResourceRow {
     param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$HideLabels,[double]$FontSize=11,[switch]$SingleLine,[string[]]$Colors)
     # Enabled hardware values persist through every layout; unavailable readings retain their placeholders.
     $Row.Panel.Visibility='Collapsed'; $Row.Host.Visibility='Collapsed'
+    # Restore the simple group before selecting the next responsive layout.
+    foreach ($box in $Row.Boxes) { $box.Child=$null }
+    $Row.Panel.Children.Clear()
+    foreach ($item in $Row.Items) { [void]$Row.Panel.Children.Add($item) }
+    $Row.Group.Visibility='Visible'; $Row.Aligned.Visibility='Collapsed'
     if (-not $script:ResourceOptions[$Key]) { return 0 }
     $reading=$script:ResourceReadings[$Key]
     $available=$reading.Available -and ([DateTimeOffset]::Now-$reading.SampledAt).TotalSeconds -lt 15
@@ -114,8 +128,51 @@ function Update-ResourceRow {
     }
     # Bound the whole group to its allocated column; uniform scaling keeps every number inside it.
     $Row.Host.Width=[Math]::Max(1,$Width); $Row.Host.MaxHeight=[Math]::Max(1,$Height)
+    $Row.Group.MaxHeight=[Math]::Max(1,$Height)
     $Row.Panel.Visibility='Visible'; $Row.Host.Visibility='Visible'
     return [Math]::Max(1,$Width)
+}
+
+function Set-ResourceRowAlignment {
+    param($Card)
+    $row=$Card.Resources
+    # Follow final WPF coordinates after resize; menu-height readings retain their single-line group.
+    if ($row.Aligned.Visibility -ne 'Visible' -or -not $row.Host.IsVisible) { return }
+    $bindings=$Card.Bindings
+    $targets=if ($bindings.ultraCompactPanel.Visibility -eq 'Visible') {
+        @($bindings.compactPrimaryPercent,$bindings.compactSecondaryPercent,$bindings.compactCreditsText)
+    } else { @($bindings.primaryPercent,$bindings.secondaryPercent,$bindings.creditsText) }
+    for ($index=0;$index -lt 3;$index++) {
+        $target=$targets[$index]
+        # Hidden credit slots still have a row; full views derive its location from the grid tracks.
+        if ($index -eq 2 -and $bindings.creditsArea.Visibility -ne 'Visible' -and $bindings.ultraCompactPanel.Visibility -ne 'Visible') {
+            $grid=$bindings.outerBorder.Child
+            $top=0; for ($track=0;$track -lt 3;$track++) { $top+=$grid.RowDefinitions[$track].ActualHeight }
+            $center=$grid.TranslatePoint([Windows.Point]::new(0,$top+13.5),$row.Host).Y
+            $height=27
+        } else {
+            $height=[Math]::Max(1,$target.ActualHeight)
+            $center=$target.TranslatePoint([Windows.Point]::new(0,$height/2),$row.Host).Y
+        }
+        # Position only when geometry changes, avoiding another layout cycle on steady countdown ticks.
+        $box=$row.Boxes[$index]; $width=[Math]::Max(1,$row.Host.ActualWidth-6)
+        if ([Math]::Abs($box.Width-$width) -gt 0.1 -or [double]::IsNaN($box.Width)) { $box.Width=$width }
+        if ([Math]::Abs($box.Height-$height) -gt 0.1 -or [double]::IsNaN($box.Height)) { $box.Height=$height }
+        $position=$center-$height/2
+        if ([Math]::Abs([Windows.Controls.Canvas]::GetTop($box)-$position) -gt 0.1 -or [double]::IsNaN([Windows.Controls.Canvas]::GetTop($box))) { [Windows.Controls.Canvas]::SetTop($box,$position) }
+        [Windows.Controls.Canvas]::SetLeft($box,3)
+    }
+}
+
+function Enable-AlignedResourceRows {
+    param($Row)
+    # Reuse the existing colored readings and their hover help in the matching quota rows.
+    $Row.Panel.Children.Clear()
+    for ($index=0;$index -lt 3;$index++) {
+        $Row.Items[$index].Margin=[Windows.Thickness]::new(0)
+        $Row.Boxes[$index].Child=$Row.Items[$index]
+    }
+    $Row.Group.Visibility='Collapsed'; $Row.Aligned.Visibility='Visible'
 }
 
 function Stop-ResourceSampling {

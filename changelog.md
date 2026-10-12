@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.7.6 — October 12, 2026
+
+- Align CPU with 5-hour, RAM with Weekly and GPU with the Credits position in full and compact views, including an empty credit track for Claude. Scale each hardware value independently without moving its row; menu-height views retain their single line.
+
 ## 2.7.5 — October 11, 2026
 
 - Match compact quota readings to the enabled CPU/RAM/GPU column: colored 5-hour, Weekly and Credits labels beside their values, retaining countdowns underneath while space permits. Narrow cards drop labels together; full bars and menu-height lines retain their existing layout.
