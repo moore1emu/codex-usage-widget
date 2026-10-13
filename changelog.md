@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.8.2 — October 13, 2026
+
+- Name the Windows sign-in shortcut AI Usage Widget and migrate matching older Codex Usage Widget shortcuts without duplicates. Preserve unrelated startup entries, and keep automatic shortcut-update failures from blocking the widget itself.
+- Center usage names and values consistently within their rows and align CPU/RAM/GPU glyph baselines with quota values after scaling in smaller views.
+
 ## 2.8.1 — October 13, 2026
 
 - Align usage names, usage values, hardware names and hardware values in four left-aligned columns, including compact labeled rows. Preserve full-width usage bars and quota/hardware row alignment.

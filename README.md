@@ -6,7 +6,7 @@ A small Windows desktop and tray widget for **Codex and Claude subscription usag
 
 Use **Local only (pause sharing)** in the tray menu to hide shared accounts and pause all JSON reads and writes. Switch it off to restore saved connections. The pause survives restarts.
 
-**Version 2.8.1** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.8.2** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -14,7 +14,7 @@ Use **Local only (pause sharing)** in the tray menu to hide shared accounts and 
 2. Download the repository and extract it. Keep all files together.
 3. Double-click **Start-AIUsageWidget.cmd**.
 
-Optional: run **Create-DesktopShortcut.cmd** for a desktop shortcut. OneDrive destinations include the computer name to avoid shortcut conflicts between machines. Enable **Launch at Windows sign-in** from the tray menu for automatic startup.
+Optional: run **Create-DesktopShortcut.cmd** for a desktop shortcut. OneDrive destinations include the computer name to avoid shortcut conflicts between machines. Enable **Launch at Windows sign-in** from the tray menu for automatic startup. Its entry is named **AI Usage Widget**; matching older Codex-named entries upgrade automatically.
 
 ## Widget sizes
 

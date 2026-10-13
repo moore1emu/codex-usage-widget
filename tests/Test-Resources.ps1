@@ -1,6 +1,6 @@
 # Exercise the real resource controls with synthetic processes and counters only.
 . (Join-Path $PSScriptRoot 'Initialize-TestWidget.ps1')
-function Assert-Resource($Condition,[string]$Message) { if (-not $Condition) { throw $Message } }
+function Assert-Resource($Condition,[string]$Message) { if (-not $Condition) { Close-TestWidget; throw $Message } }
 Assert-Resource ((Format-ResourceMemory 1000000000) -eq '1000 MB') 'Threshold should stay in MB.'
 Assert-Resource ((Format-ResourceMemory 1280000000) -eq '1 GB') 'RAM should switch to decimal GB.'
 # Give the widget a child within Codex's tree to verify neither enters app totals.
@@ -60,7 +60,7 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
         $window.Width=$size[0]; $window.Height=$size[1]
         Wait-TestDispatcher 50
         foreach ($reading in $script:ResourceReadings.Values) {$reading.SampledAt=[DateTimeOffset]::Now}
-        Update-Display; $window.UpdateLayout()
+        Update-Display; $window.UpdateLayout(); Wait-TestDispatcher 20; $window.UpdateLayout()
         $cards=if ($layout -eq 'Account picker') {@($script:AccountCards[$script:SelectedAccount])} else {@($script:AccountCards.Local,$script:AccountCards.Claude)}
         foreach ($card in $cards) {
             Assert-Resource ($card.Resources.Host.Visibility -eq 'Visible' -and $card.Resources.Items.Count -eq 3) ('Enabled readings disappeared in '+$layout+' at '+($size -join 'x'))
@@ -84,6 +84,11 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
                 $names=if ($bindings.primaryArea.Visibility -eq 'Visible') {@($bindings.primaryLabel,$bindings.secondaryLabel)} else {@($bindings.compactPrimaryCaption,$bindings.compactSecondaryCaption)}
                 $values=if ($bindings.primaryArea.Visibility -eq 'Visible') {@($bindings.primaryPercent,$bindings.secondaryPercent)} else {@($bindings.compactPrimaryPercent,$bindings.compactSecondaryPercent)}
                 if ($bindings.creditsArea.Visibility -eq 'Visible') {$names+=$bindings.creditsLabel;$values+=$bindings.creditsText}
+                for ($index=0;$index -lt $names.Count;$index++) {
+                    $nameBaseline=$names[$index].TranslatePoint([Windows.Point]::new(0,$names[$index].BaselineOffset),$card.Container).Y
+                    $valueBaseline=$values[$index].TranslatePoint([Windows.Point]::new(0,$values[$index].BaselineOffset),$card.Container).Y
+                    Assert-Resource ([Math]::Abs($nameBaseline-$valueBaseline) -lt 0.5) 'Usage name and value baselines did not line up.'
+                }
                 foreach ($column in @(@{Items=$names},@{Items=$values})) {
                     $reference=$column.Items[0].TranslatePoint([Windows.Point]::new(0,0),$card.Container).X
                     foreach ($text in $column.Items) {
@@ -112,7 +117,16 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
                         $top=0; for ($track=0;$track -lt 3;$track++) { $top+=$grid.RowDefinitions[$track].ActualHeight }
                         $expected=$grid.TranslatePoint([Windows.Point]::new(0,$top+13.5),$card.Container).Y
                     } else { $expected=$targets[$index].TranslatePoint([Windows.Point]::new(0,$targets[$index].ActualHeight/2),$card.Container).Y }
-                    Assert-Resource ([Math]::Abs($actual-$expected) -lt 1) ('Hardware reading is not aligned to its quota row: '+$index+' in '+$layout+' at '+($size -join 'x'))
+                    # Compare glyph baselines too, detecting top-aligned values beside centered labels.
+                    if ($targets[$index].IsVisible) {
+                        $expectedBaseline=$targets[$index].TranslatePoint([Windows.Point]::new(0,$targets[$index].BaselineOffset),$card.Container).Y
+                        $actualBaseline=$item.TranslatePoint([Windows.Point]::new(0,$item.BaselineOffset),$card.Container).Y
+                        Assert-Resource ([Math]::Abs($actualBaseline-$expectedBaseline) -lt 0.5) 'Hardware and quota baselines did not line up.'
+                    }
+                    # A reserved empty credit track has no glyph; only that slot uses a center comparison.
+                    if (-not $targets[$index].IsVisible -and $bindings.ultraCompactPanel.Visibility -ne 'Visible') {
+                        Assert-Resource ([Math]::Abs($actual-$expected) -lt 2) 'GPU drifted from the reserved credit track.'
+                    }
                 }
             }
 
@@ -137,8 +151,8 @@ $script:ClaudeView.Window.UpdateLayout()
 $detached=$script:AccountCards.Claude
 for ($index=0;$index -lt 3;$index++) {
     $item=$detached.Resources.Items[$index]; $value=$detached.CompactRows[$index].Value
-    $actual=$item.TranslatePoint([Windows.Point]::new(0,$item.ActualHeight/2),$detached.Container).Y
-    $expected=$value.TranslatePoint([Windows.Point]::new(0,$value.ActualHeight/2),$detached.Container).Y
+    $actual=$item.TranslatePoint([Windows.Point]::new(0,$item.BaselineOffset),$detached.Container).Y
+    $expected=$value.TranslatePoint([Windows.Point]::new(0,$value.BaselineOffset),$detached.Container).Y
     Assert-Resource ([Math]::Abs($actual-$expected) -lt 1) 'Detached hardware readings must follow their compact quota rows.'
 }
 

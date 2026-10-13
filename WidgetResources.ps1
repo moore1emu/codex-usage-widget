@@ -80,11 +80,11 @@ function New-ResourceRow {
     foreach ($metric in @('CPU','RAM','GPU')) {
         $text=[Windows.Controls.TextBlock]::new(); $text.Foreground='#DDE3EF'; $text.FontSize=11
         # Separate names and values into real columns rather than spacing a combined string.
-        $label=[Windows.Controls.TextBlock]::new(); $label.Text=$metric; $label.HorizontalAlignment='Left'
+        $label=[Windows.Controls.TextBlock]::new(); $label.Text=$metric; $label.HorizontalAlignment='Left'; $label.VerticalAlignment='Center'
         $cell=[Windows.Controls.Grid]::new(); $cell.HorizontalAlignment='Left'; $cell.Margin=[Windows.Thickness]::new(0,0,3,0)
         [void]$cell.ColumnDefinitions.Add([Windows.Controls.ColumnDefinition]::new())
         $valueColumn=[Windows.Controls.ColumnDefinition]::new(); $valueColumn.Width=[Windows.GridLength]::Auto; [void]$cell.ColumnDefinitions.Add($valueColumn)
-        [Windows.Controls.Grid]::SetColumn($text,1); $text.HorizontalAlignment='Left'
+        [Windows.Controls.Grid]::SetColumn($text,1); $text.HorizontalAlignment='Left'; $text.VerticalAlignment='Center'
         [void]$cell.Children.Add($label); [void]$cell.Children.Add($text)
         [void]$panel.Children.Add($cell); $items+=$text; $labels+=$label; $cells+=$cell
     }
@@ -175,16 +175,22 @@ function Set-ResourceRowAlignment {
             $top=0; for ($track=0;$track -lt 3;$track++) { $top+=$grid.RowDefinitions[$track].ActualHeight }
             $center=$grid.TranslatePoint([Windows.Point]::new(0,$top+13.5),$row.Host).Y
             $height=27
+            $reference=$bindings.primaryPercent
+            $baseline=$center+$reference.BaselineOffset-$reference.ActualHeight/2
         } else {
             $height=[Math]::Max(1,$target.ActualHeight)
-            $center=$target.TranslatePoint([Windows.Point]::new(0,$height/2),$row.Host).Y
+            $baseline=$target.TranslatePoint([Windows.Point]::new(0,$target.BaselineOffset),$row.Host).Y
         }
         # Position only when geometry changes, avoiding another layout cycle on steady countdown ticks.
         # Scale equal-width name/value grids so neither column shifts with different value lengths.
         $box=$row.Boxes[$index]; $width=[Math]::Max(1,[Math]::Min($row.NaturalWidth,$row.Host.ActualWidth-6))
         if ([Math]::Abs($box.Width-$width) -gt 0.1 -or [double]::IsNaN($box.Width)) { $box.Width=$width }
         if ([Math]::Abs($box.Height-$height) -gt 0.1 -or [double]::IsNaN($box.Height)) { $box.Height=$height }
-        $position=$center-$height/2
+        # Use the actual transformed glyph baseline, including WPF scaling and pixel rounding.
+        $actualBaseline=$row.Items[$index].TranslatePoint([Windows.Point]::new(0,$row.Items[$index].BaselineOffset),$row.Host).Y
+        $currentTop=[Windows.Controls.Canvas]::GetTop($box)
+        if ([double]::IsNaN($currentTop)) { $currentTop=0 }
+        $position=$currentTop+$baseline-$actualBaseline
         if ([Math]::Abs([Windows.Controls.Canvas]::GetTop($box)-$position) -gt 0.1 -or [double]::IsNaN([Windows.Controls.Canvas]::GetTop($box))) { [Windows.Controls.Canvas]::SetTop($box,$position) }
         [Windows.Controls.Canvas]::SetLeft($box,3)
     }

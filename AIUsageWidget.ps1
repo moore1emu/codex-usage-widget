@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.8.1'
+$script:WidgetVersion = '2.8.2'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -80,7 +80,9 @@ Initialize-NotificationIdentity
 $script:WidgetDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ReaderPath = Join-Path $script:WidgetDirectory 'Get-CodexUsage.ps1'
 # Windows startup entries are local to this user and computer, not synchronized preferences.
-$script:StartupShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'Codex Usage Widget.lnk'
+$script:StartupShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'AI Usage Widget.lnk'
+# Recognize owned shortcuts from before the public display-name change.
+$script:LegacyStartupShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'Codex Usage Widget.lnk'
 $script:StateDirectory = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CodexUsageWidget'
 if (-not (Test-Path -LiteralPath $script:StateDirectory)) {
     [void] (New-Item -ItemType Directory -Path $script:StateDirectory -Force)
@@ -196,7 +198,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
         <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="12"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" SharedSizeGroup="UsageValue"/></Grid.ColumnDefinitions>
         <TextBlock x:Name="PrimaryLabel" Text="5-hour" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
-        <TextBlock x:Name="PrimaryPercent" Grid.Column="1" Text="—" Foreground="#78A7FF" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left"/>
+        <TextBlock x:Name="PrimaryPercent" Grid.Column="1" Text="—" Foreground="#78A7FF" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
         <ProgressBar x:Name="PrimaryBar" Grid.Row="1" Grid.ColumnSpan="2" Height="8" Minimum="0" Maximum="100"
                      Background="#293041" Foreground="#669CFF" BorderThickness="0" Value="0"/>
         <TextBlock x:Name="PrimaryReset" Grid.Row="2" Grid.ColumnSpan="2" Text="Waiting for usage data"
@@ -207,7 +209,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
         <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="12"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" SharedSizeGroup="UsageValue"/></Grid.ColumnDefinitions>
         <TextBlock x:Name="SecondaryLabel" Text="Weekly" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
-        <TextBlock x:Name="SecondaryPercent" Grid.Column="1" Text="—" Foreground="#B893FF" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left"/>
+        <TextBlock x:Name="SecondaryPercent" Grid.Column="1" Text="—" Foreground="#B893FF" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
         <ProgressBar x:Name="SecondaryBar" Grid.Row="1" Grid.ColumnSpan="2" Height="8" Minimum="0" Maximum="100"
                      Background="#293041" Foreground="#A97BFF" BorderThickness="0" Value="0"/>
         <TextBlock x:Name="SecondaryReset" Grid.Row="2" Grid.ColumnSpan="2" Text="Waiting for usage data"
@@ -218,7 +220,7 @@ foreach ($helper in @('WidgetSharing.ps1','WidgetClaude.ps1','WidgetClaudeSharin
       <Grid x:Name="CreditsArea" Grid.Row="3" Visibility="Collapsed" Margin="0,5,0,0" Height="27">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" SharedSizeGroup="UsageValue"/></Grid.ColumnDefinitions>
         <TextBlock x:Name="CreditsLabel" Text="Credits" Foreground="#DDE3EF" FontSize="13" VerticalAlignment="Center"/>
-        <TextBlock x:Name="CreditsText" Grid.Column="1" Foreground="#91B8B0" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left"/>
+        <TextBlock x:Name="CreditsText" Grid.Column="1" Foreground="#91B8B0" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
       </Grid>
       <Grid x:Name="FooterArea" Grid.Row="4" Height="24">
         <TextBlock x:Name="UpdatedText" Text="Starting…" Foreground="#687187" FontSize="9" VerticalAlignment="Bottom"/>
@@ -442,10 +444,16 @@ function New-WindowUsageIcon {
 }
 
 function Get-LaunchAtSignIn {
+    param([string]$Path)
+    # Recognize either owned filename during migration, checking each shortcut's exact target separately.
+    if (-not $Path) {
+        foreach ($candidate in @($script:StartupShortcutPath,$script:LegacyStartupShortcutPath)) { if (Get-LaunchAtSignIn -Path $candidate) { return $true } }
+        return $false
+    }
     # Consider the setting enabled only when our own shortcut targets this folder's launcher.
-    if (-not (Test-Path -LiteralPath $script:StartupShortcutPath -PathType Leaf)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
     $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($script:StartupShortcutPath)
+    $shortcut = $shell.CreateShortcut($Path)
     try {
         $launcher = Join-Path $script:WidgetDirectory 'Start-AIUsageWidget.ps1'
         return $shortcut.TargetPath -eq "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -and
@@ -463,11 +471,14 @@ function Get-LaunchAtSignIn {
 function Set-LaunchAtSignIn {
     param([bool] $Enabled)
     # Do not overwrite or remove a different shortcut that happens to use our chosen filename.
-    if ((Test-Path -LiteralPath $script:StartupShortcutPath) -and -not (Get-LaunchAtSignIn)) {
-        throw 'A different AI Usage Widget startup shortcut already exists. Remove or rename that entry before changing this setting.'
+    foreach ($path in @($script:StartupShortcutPath,$script:LegacyStartupShortcutPath)) {
+        if ((Test-Path -LiteralPath $path) -and -not (Get-LaunchAtSignIn -Path $path)) {
+            throw 'A different AI Usage Widget startup shortcut already exists. Remove or rename that entry before changing this setting.'
+        }
     }
     if (-not $Enabled) {
-        if (Test-Path -LiteralPath $script:StartupShortcutPath -PathType Leaf) { Remove-Item -LiteralPath $script:StartupShortcutPath }
+        # Remove only verified owned entries, including the old filename during an upgrade.
+        foreach ($path in @($script:StartupShortcutPath,$script:LegacyStartupShortcutPath)) { if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path } }
         return
     }
     # Use the existing hidden bootstrap and silently retain any already-running widget.
@@ -481,6 +492,8 @@ function Set-LaunchAtSignIn {
         $shortcut.IconLocation = (Join-Path $script:WidgetDirectory 'AIUsage-App.ico') + ',0'
         $shortcut.Description = 'Start AI Usage Widget at sign-in without duplicating an existing widget.'
         $shortcut.Save()
+        # Remove the verified old entry only after the new shortcut has been saved successfully.
+        if (Test-Path -LiteralPath $script:LegacyStartupShortcutPath -PathType Leaf) { Remove-Item -LiteralPath $script:LegacyStartupShortcutPath }
     } finally {
         [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut)
         [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)
@@ -488,7 +501,10 @@ function Set-LaunchAtSignIn {
 }
 
 # Refresh an owned sign-in shortcut's title, icon and target after the application rename.
-if (Get-LaunchAtSignIn) { Set-LaunchAtSignIn -Enabled $true }
+if (Get-LaunchAtSignIn) {
+    # A conflicting or unwritable startup entry must not prevent the desktop widget from opening.
+    try { Set-LaunchAtSignIn -Enabled $true } catch { }
+}
 
 $trayMenu = [System.Windows.Forms.ContextMenuStrip]::new()
 # Keep version information accessible even when the widget is minimized or tiny.
