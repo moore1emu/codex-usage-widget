@@ -8,6 +8,7 @@ $script:ClaudeOptions = @{
     Interval=5
     ResetHours=25
     WeeklyDate=$true
+    Credits='Available'
     PrimaryAlert=0
     SecondaryAlert=0
     ResetAlert=$false
@@ -20,7 +21,7 @@ $script:ClaudeNextRefresh = [DateTimeOffset]::MinValue
 
 function ConvertTo-ClaudeUsage {
     param($Payload)
-    # Convert only subscription quotas; extra-usage spending is not a Codex credit balance.
+    # Convert subscription quotas and the separate prepaid balance; a monthly spending cap is not a balance.
     $snapshot = @{ fetchedAt=[DateTimeOffset]::Now.ToUnixTimeSeconds(); planType=''; ordinaryUsageAllowed=$false; credits=$null }
     foreach ($entry in @(@{Key='primary';Source='five_hour';Minutes=300},@{Key='secondary';Source='seven_day';Minutes=10080})) {
         $quota = $Payload.($entry.Source)
@@ -45,6 +46,14 @@ function ConvertTo-ClaudeUsage {
             $reset = $date.ToUnixTimeSeconds()
         }
         $snapshot[$entry.Key] = @{usedPercent=$used;resetsAt=$reset;windowDurationMins=$entry.Minutes}
+    }
+    # Accept only a validated prepaid amount and currency, converting Claude's minor units to currency units.
+    $prepaid=$Payload.prepaid_credits
+    $amount=[decimal]0
+    if ($prepaid.currency -is [string] -and $prepaid.currency.Trim() -match '^[A-Za-z]{3}$' -and
+        $null -ne $prepaid.amount -and [decimal]::TryParse([string]$prepaid.amount,[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$amount) -and $amount -ge 0) {
+        $balance=$amount/100
+        $snapshot.credits=@{balance=$balance.ToString([Globalization.CultureInfo]::InvariantCulture);hasCredits=($balance -gt 0);unlimited=$false;currency=$prepaid.currency.Trim().ToUpperInvariant()}
     }
     # Unknown quotas stay unknown, including plans which do not provide these meters.
     $snapshot.ordinaryUsageAllowed = $snapshot.primary -and $snapshot.primary.usedPercent -lt 100
@@ -105,6 +114,7 @@ function Restore-ClaudeSettings {
         $max = if ($key -eq 'ResetHours') {168} else {100}
         if (($saved.$key -is [int] -or $saved.$key -is [long]) -and $saved.$key -ge 0 -and $saved.$key -le $max) { $script:ClaudeOptions[$key]=[int]$saved.$key }
     }
+    if ($saved.Credits -in @('Available','Always','Off')) { $script:ClaudeOptions.Credits=$saved.Credits }
     if ($saved.Interval -in @(0,1,5,15,30)) { $script:ClaudeOptions.Interval=[int]$saved.Interval }
     if ($saved.Placement -in @('Follow layout','Attached','Separate window')) { $script:ClaudeOptions.Placement=$saved.Placement }
     if ($script:ColorSchemes.Contains([string]$saved.Scheme)) { $script:ClaudeOptions.Scheme=$saved.Scheme }
@@ -214,7 +224,22 @@ function Start-ClaudeRefresh {
     const id = org.uuid || org.id;
     const usage = await read('/api/organizations/' + encodeURIComponent(id) + '/usage');
     const quota = value => value ? {utilization:value.utilization ?? null, resets_at:value.resets_at ?? null} : null;
-    chrome.webview.postMessage({type:'widget-usage',request,source:id,usage:{five_hour:quota(usage.five_hour),seven_day:quota(usage.seven_day)}});
+    // Enrich from the same subscription without letting optional billing failure hide valid quotas.
+    let prepaid = null;
+    const creditController = new AbortController();
+    const creditTimeout = setTimeout(() => creditController.abort(), 2000);
+    try {
+      const response = await fetch('/api/organizations/' + encodeURIComponent(id) + '/prepaid/credits', {
+        credentials:'same-origin', cache:'no-store', signal:creditController.signal
+      });
+      if (response.ok) {
+        const value = await response.json();
+        // Export only the displayed balance fields, never the raw billing response.
+        prepaid = {amount:value.amount ?? null, currency:value.currency ?? null};
+      }
+    } catch (_) { /* Missing or unavailable credits remain unknown; quota refresh still succeeds. */ }
+    finally { clearTimeout(creditTimeout); }
+    chrome.webview.postMessage({type:'widget-usage',request,source:id,usage:{five_hour:quota(usage.five_hour),seven_day:quota(usage.seven_day),prepaid_credits:prepaid}});
   } catch (error) {
     // Never send response bodies or authentication information into widget logs.
     chrome.webview.postMessage({type:'widget-usage',request,status:error.status || 0,retry:error.retry || 0});

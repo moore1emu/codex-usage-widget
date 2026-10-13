@@ -6,7 +6,7 @@ A small Windows desktop and tray widget for **Codex and Claude subscription usag
 
 Use **Local only (pause sharing)** in the tray menu to hide shared accounts and pause all JSON reads and writes. Switch it off to restore saved connections. The pause survives restarts.
 
-**Version 2.7.7** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
+**Version 2.8.0** · [Changelog](changelog.md) · [Detailed guide and troubleshooting](extradetails.md)
 
 ## Quick start
 
@@ -24,7 +24,7 @@ Optional: run **Create-DesktopShortcut.cmd** for a desktop shortcut. OneDrive de
 
 ![Stationary menu-height usage bar](docs/screenshots/usage-bar.png)
 
-Percentages show **quota remaining**: 100% is full and 0% is exhausted. Credits appear when available.
+Percentages show **quota remaining**: 100% is full and 0% is exhausted. Credits appear when available. Claude shows its subscription prepaid balance with currency and two decimals, using the same signed-in connection; its API credits and monthly spending cap are separate.
 
 | Mini | Small | Medium | Large / Default |
 | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ Drag to move; hover to resize from either bottom corner. Use **↻** to refresh,
 
 ## Settings
 
-Right-click the tray icon → **Settings...**. **General** holds window/startup controls and default refresh, reset-display, notification and Codex credit settings. **Codex**, **Shared Codex**, **Claude**, and **Shared Claude** each have one “Use General defaults” switch at the top for all supported account settings; unchecking restores the account’s manual values. Colors stay independent. Turn off any source you do not use; its panel, refreshes and alerts stop. You can use the widget while Settings is open. **Apply** updates the widget without closing Settings; **Save** applies and closes. Shared settings lock when **Enable shared Codex account** is off. Hover over settings or their labels for help. **0 disables a warning threshold.** Reset alerts require weekly quota above 0%.
+Right-click the tray icon → **Settings...**. **General** holds window/startup controls and default refresh, reset-display, notification and credit display settings. **Codex**, **Shared Codex**, **Claude**, and **Shared Claude** each have one “Use General defaults” switch at the top for all supported account settings; unchecking restores the account’s manual values. Colors stay independent. Turn off any source you do not use; its panel, refreshes and alerts stop. You can use the widget while Settings is open. **Apply** updates the widget without closing Settings; **Save** applies and closes. Shared settings lock when **Enable shared Codex account** is off. Hover over settings or their labels for help. **0 disables a warning threshold.** Reset alerts require weekly quota above 0%.
 
 | General defaults | Shared Codex |
 | --- | --- |

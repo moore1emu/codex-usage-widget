@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.7.7'
+$script:WidgetVersion = '2.8.0'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -1036,7 +1036,12 @@ function Update-ResponsiveLayout {
                 $valueWidth = $script:SharedAccountLayout.Values[$density]
             }
         }
-        foreach ($area in @($primaryArea,$secondaryArea,$creditsArea)) { $area.ColumnDefinitions[1].MinWidth = if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $valueWidth } else { 0 } }
+        foreach ($area in @($primaryArea,$secondaryArea,$creditsArea)) {
+            # Connected measurements own this width; a hidden currency row must not retain WPF's previous shared size.
+            if ($script:SharedAccountLayout) { $area.ColumnDefinitions[1].ClearValue([Windows.Controls.ColumnDefinition]::SharedSizeGroupProperty) }
+            else { $area.ColumnDefinitions[1].SharedSizeGroup='UsageValue' }
+            $area.ColumnDefinitions[1].MinWidth = if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $valueWidth } else { 0 }
+        }
         if (-not $script:ProbingAccountLayout -and $requiredWidth + 14 -le $window.ActualWidth) { break }
     }
     # Wrap reset details at the current width and retain them before considering bars.
@@ -1254,8 +1259,8 @@ function Update-TrayIcon {
         switch ($key) {
             Local {$snapshot=$script:Usage;$scheme=$script:LocalScheme;$mode=$script:CreditDisplayMode;$failure=$script:RefreshError}
             Remote {$snapshot=$script:RemoteUsage;$scheme=$script:RemoteScheme;$mode=$script:SharedCreditDisplayMode;$failure=$script:ReadError}
-            Claude {$snapshot=$script:ClaudeUsage;$scheme=$script:ClaudeOptions.Scheme;$mode='Off';$failure=if ($script:ClaudeStatus -like 'Subscription*') {$null} else {$script:ClaudeStatus}}
-            SharedClaude {$snapshot=$script:SharedClaudeUsage;$scheme=$script:SharedClaudeOptions.Scheme;$mode='Off';$failure=$script:ClaudeFileState.ReadError}
+            Claude {$snapshot=$script:ClaudeUsage;$scheme=$script:ClaudeOptions.Scheme;$mode=$script:ClaudeOptions.Credits;$failure=if ($script:ClaudeStatus -like 'Subscription*') {$null} else {$script:ClaudeStatus}}
+            SharedClaude {$snapshot=$script:SharedClaudeUsage;$scheme=$script:SharedClaudeOptions.Scheme;$mode=$script:SharedClaudeOptions.Credits;$failure=$script:ClaudeFileState.ReadError}
             default {$snapshot=$null;$scheme=$script:LocalScheme;$mode='Off';$failure=$null}
         }
         # Imported tray meters use the same expiry rule as cards while keeping cached amounts for hover.
@@ -1309,7 +1314,7 @@ function Update-SelectedTrayIcon {
     $secondaryLabel = if ($secondaryKnown) { '{0:N0}% left' -f $secondaryValue } else { 'unavailable' }
     # Include available credits while respecting the same display setting as the widget.
     $creditLabel = Get-CreditLabel
-    $showCreditText = $script:CreditDisplayMode -ne 'Off' -and $creditLabel -notmatch 'unavailable|none|^Credits: 0$'
+    $showCreditText = $script:CreditDisplayMode -ne 'Off' -and $creditLabel -notmatch 'unavailable|none|^Credits: (?:\$)?0(?:[.,]00)?(?: [A-Z]{3})?$'
     $tooltip = "$script:TrayAccountName · 5h $primaryLabel · Wk $secondaryLabel" + $(if ($showCreditText) { ' · ' + $creditLabel } else { '' })
     if ($script:RefreshError) { $tooltip = 'Stale · ' + $tooltip }
     $trayIcon.Text = $tooltip.Substring(0,[Math]::Min(127,$tooltip.Length))
@@ -1466,7 +1471,7 @@ function Update-Display {
     $creditsText.Text = if ($creditLabel -match 'unavailable$') { '—' } else { $creditLabel -replace '^Credits: ', '' }
     $creditsText.ToolTip = $creditLabel
     # Use a short numeric placeholder for unknown balances in the smallest badge.
-    $compactCreditsText.Text = if ($creditData.unlimited -eq $true) { '∞' } elseif ($hasBalance) { $balance.ToString('0', [Globalization.CultureInfo]::CurrentCulture) } elseif ($creditData.hasCredits -eq $false) { '0' } else { '—' }
+    $compactCreditsText.Text = if ($creditData.unlimited -eq $true) { '∞' } elseif ($hasBalance -and $creditData.currency) { $creditLabel -replace '^Credits: ','' } elseif ($hasBalance) { $balance.ToString('0', [Globalization.CultureInfo]::CurrentCulture) } elseif ($creditData.hasCredits -eq $false) { '0' } else { '—' }
     $compactCreditsText.ToolTip = $creditLabel
 
     # Show remaining five-hour quota when the window is available.
@@ -1536,15 +1541,21 @@ function Update-RefreshStatus {
 }
 
 function Get-CreditLabel {
+    param($Credits=$script:Usage.credits)
     # Treat missing credit data as unknown rather than inventing a zero balance.
-    $credits = $script:Usage.credits
+    $credits = $Credits
     if ($null -eq $credits) { return 'Credits: unavailable' }
     if ($credits.unlimited -eq $true) { return 'Credits: unlimited' }
     # Preserve the service's reported units and precision without assuming a currency.
     if ($null -ne $credits.balance -and -not [string]::IsNullOrWhiteSpace([string]$credits.balance)) {
-        # Round the display to a whole credit without changing the account balance.
+        # Format the balance without changing its stored precision.
         $value = [decimal]0
         if ([decimal]::TryParse([string]$credits.balance, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
+            # Claude balances retain currency and cents; Codex credits keep their existing whole-number display.
+            if ($credits.currency -match '^[A-Z]{3}$') {
+                $amount=$value.ToString('0.00',[Globalization.CultureInfo]::CurrentCulture)
+                return ('Credits: '+$(if ($credits.currency -eq 'USD') {'$'+$amount} else {$amount+' '+$credits.currency}))
+            }
             return ('Credits: ' + $value.ToString('0', [Globalization.CultureInfo]::CurrentCulture))
         }
         return 'Credits: balance unavailable'

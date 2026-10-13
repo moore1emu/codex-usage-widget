@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.8.0 — October 13, 2026
+
+- Add Claude subscription prepaid usage-credit balances to local/shared panels and tray hover, with currency and two decimal places. Reuse the signed-in Usage connection; an unavailable billing response does not block quota updates or invent a balance.
+- Keep connected value columns aligned when currency balances are shown or hidden.
+- Add Claude credit visibility choices and General-default inheritance. Preserve currency and balance changes in private shared JSON, retaining compatibility with older snapshots and unitless Codex credits.
+
 ## 2.7.7 — October 12, 2026
 
 - Give CPU, RAM and GPU readings a consistent left edge while preserving their quota-row alignment and independent scaling in narrow windows.

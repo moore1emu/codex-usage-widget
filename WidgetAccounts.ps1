@@ -250,14 +250,14 @@ function Render-AccountCard {
             $script:PrimaryResetHours = $script:SharedPrimaryResetHours
             $script:ShowWeeklyResetDate = $script:SharedShowWeeklyResetDate
         }
-        # Claude owns its reset options and has no Codex credit balance.
+        # Claude owns its reset and prepaid-credit display options.
         if ($Claude) {
-            $script:CreditDisplayMode='Off'
+            $script:CreditDisplayMode=$script:ClaudeOptions.Credits
             $script:PrimaryResetHours=$script:ClaudeOptions.ResetHours
             $script:ShowWeeklyResetDate=$script:ClaudeOptions.WeeklyDate
         }
         # Imported Claude uses the same quota renderer with independent reset preferences.
-        if ($SharedClaude) {$script:CreditDisplayMode='Off';$script:PrimaryResetHours=$script:SharedClaudeOptions.ResetHours;$script:ShowWeeklyResetDate=$script:SharedClaudeOptions.WeeklyDate}
+        if ($SharedClaude) {$script:CreditDisplayMode=$script:SharedClaudeOptions.Credits;$script:PrimaryResetHours=$script:SharedClaudeOptions.ResetHours;$script:ShowWeeklyResetDate=$script:SharedClaudeOptions.WeeklyDate}
         $colors = $script:ColorSchemes[$Scheme]
         foreach ($control in @($primaryPercent,$primaryBar,$compactPrimaryPercent)) { $control.Foreground = $colors[0] }
         foreach ($control in @($secondaryPercent,$secondaryBar,$compactSecondaryPercent)) { $control.Foreground = $colors[1] }
@@ -295,7 +295,7 @@ function Render-AccountCard {
             $lines+=$entry.Label+': '+$amount
         }
         if ($Snapshot.credits.unlimited) { $lines+='Credits: unlimited' }
-        elseif ($null -ne $Snapshot.credits.balance) { $lines+='Credits: '+[decimal]::Parse([string]$Snapshot.credits.balance,[Globalization.CultureInfo]::InvariantCulture).ToString('0.##') }
+        elseif ($null -ne $Snapshot.credits.balance) { $lines+=(Get-CreditLabel -Credits $Snapshot.credits) }
         $calculated=[DateTimeOffset]::FromUnixTimeSeconds([long]$Snapshot.fetchedAt).ToLocalTime().ToString('MMM d, h:mm tt')
         $lines+='Last calculated '+$calculated
         $Card.Container.ToolTip=$lines -join "`n"
@@ -368,10 +368,10 @@ function Update-AccountViews {
     # Reserve equal credit space across connected panels without inventing Claude balances.
     $reserveCredits = $false
     if ($script:AccountLayout -in @('Side by side','Stacked')) {
-        foreach ($source in @('Local','Remote')) {
+        foreach ($source in @('Local','Remote','Claude','SharedClaude')) {
             if ($source -notin $keys) { continue }
-            $creditMode = if ($source -eq 'Local') { $script:CreditDisplayMode } else { $script:SharedCreditDisplayMode }
-            $creditSnapshot = if ($source -eq 'Local') { $script:Usage } else { $script:RemoteUsage }
+            $creditMode = switch ($source) { Local {$script:CreditDisplayMode} Remote {$script:SharedCreditDisplayMode} Claude {$script:ClaudeOptions.Credits} SharedClaude {$script:SharedClaudeOptions.Credits} }
+            $creditSnapshot = switch ($source) { Local {$script:Usage} Remote {$script:RemoteUsage} Claude {$script:ClaudeUsage} SharedClaude {$script:SharedClaudeUsage} }
             $balance = [decimal]0
             $hasBalance = $creditSnapshot.credits -and [decimal]::TryParse([string]$creditSnapshot.credits.balance,[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$balance)
             if ($creditMode -eq 'Always' -or ($creditMode -eq 'Available' -and ($creditSnapshot.credits.unlimited -eq $true -or ($hasBalance -and $balance -gt 0)))) { $reserveCredits = $true }

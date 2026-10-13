@@ -78,5 +78,21 @@ $script:SharedClaudeOptions.Enabled=$false
 $lastRead=$script:ClaudeFileState.LastReadAt
 Invoke-ClaudeSharing -Force
 if ($script:ClaudeFileState.LastReadAt -ne $lastRead) {throw 'Disabled Claude sharing continued reading.'}
+# Credit changes publish even when the quota is unchanged; currency survives the private file round-trip.
+$script:ClaudeOptions.Enabled=$true; $script:SharedClaudeOptions.Enabled=$true
+$script:ClaudeUsage.credits=@{balance='12.34';currency='USD';hasCredits=$true;unlimited=$false}
+Invoke-ClaudeSharing -Fresh
+$creditFile=Get-Content -LiteralPath $script:SharedClaudeOptions.OutputPath -Raw | ConvertFrom-Json
+if ($creditFile.usage.credits.balance -ne '12.34' -or $creditFile.usage.credits.currency -ne 'USD') { throw 'Published Claude credits lost balance or currency.' }
+$creditFile.sourceId=[guid]::NewGuid().ToString('N')
+$creditFile | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $script:SharedClaudeOptions.InputPath
+Invoke-ClaudeSharing -Force
+if ($script:ClaudeFileState.ReadError -or $script:SharedClaudeUsage.credits.currency -ne 'USD' -or $script:SharedClaudeUsage.credits.balance -ne '12.34') { throw 'Imported Claude credit balance was lost.' }
+$before=[IO.File]::ReadAllText($script:SharedClaudeOptions.OutputPath)
+$script:ClaudeUsage.fetchedAt++; Invoke-ClaudeSharing -Fresh
+if ([IO.File]::ReadAllText($script:SharedClaudeOptions.OutputPath) -ne $before) { throw 'Unchanged Claude credits rewrote shared JSON.' }
+$script:ClaudeUsage.credits.balance='10.00'; Invoke-ClaudeSharing -Fresh
+$changed=Get-Content -LiteralPath $script:SharedClaudeOptions.OutputPath -Raw | ConvertFrom-Json
+if ($changed.usage.credits.balance -ne '10.00') { throw 'A credit-only change was not published.' }
 Write-Output 'PASS: separate Claude export/import, change-only writes, provider validation, source names, remote-only matched polling, stale alerts and context isolation.'
 Write-Output ('Temporary test files: '+$script:StateDirectory)

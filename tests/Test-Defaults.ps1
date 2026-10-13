@@ -5,6 +5,15 @@ try {
     foreach ($account in $script:AccountUseDefaults.Keys) {
         foreach ($enabled in $script:AccountUseDefaults[$account].Values) { if ($enabled) { throw 'Migration enabled inheritance without a choice.' } }
     }
+    # Upgrading an all-default Claude account also inherits the newly supported credit display choice.
+    $upgrade=@{generalDefaults=@{Credits='Off'};accountDefaultPreferences=@{Claude=@{Use=@{Refresh=$true;Reset=$true;Notifications=$true;Credits=$false}}}}
+    Initialize-AccountDefaults $upgrade
+    if (-not $script:AccountUseDefaults.Claude.Credits -or $script:ClaudeOptions.Credits -ne 'Off') { throw 'Claude all-default preference lost credit inheritance during upgrade.' }
+    # Explicit new credit choices survive future restarts, including a custom override.
+    $upgrade.claude=@{Credits='Always'}; $upgrade.accountDefaultPreferences.Claude.Custom=@{Credits='Always'}
+    Initialize-AccountDefaults $upgrade
+    if ($script:AccountUseDefaults.Claude.Credits -or $script:ClaudeOptions.Credits -ne 'Always') { throw 'An explicit Claude credit override was replaced on restart.' }
+    $script:ClaudeOptions.Credits='Available'; $script:GeneralDefaults.Credits='Available'
     # Reopen untouched JSON-loaded dropdowns and Apply without converting the saved intervals to Manual.
     $numericState=@{generalDefaults=@{Refresh=1};accountDefaultPreferences=@{Local=@{Custom=@{Refresh=5}};Claude=@{Custom=@{Refresh=1}}}} | ConvertTo-Json -Depth 8 | ConvertFrom-Json
     Initialize-AccountDefaults $numericState

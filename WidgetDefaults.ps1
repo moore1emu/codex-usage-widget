@@ -5,8 +5,8 @@ $script:AccountDefaultGroups = @{Refresh=@('Refresh');Reset=@('ResetHours','Week
 $script:AccountDefaultTargets = @{
     Local=@{Refresh='RefreshIntervalMinutes';ResetHours='PrimaryResetHours';WeeklyDate='ShowWeeklyResetDate';PrimaryAlert='PrimaryAlertThreshold';SecondaryAlert='SecondaryAlertThreshold';ResetAlert='NotifyPrimaryReset';Credits='CreditDisplayMode'}
     Remote=@{Refresh='ReadIntervalMinutes';ResetHours='SharedPrimaryResetHours';WeeklyDate='SharedShowWeeklyResetDate';PrimaryAlert='SharedPrimaryAlertThreshold';SecondaryAlert='SharedSecondaryAlertThreshold';ResetAlert='SharedNotifyPrimaryReset';Credits='SharedCreditDisplayMode'}
-    Claude=@{Refresh='Interval';ResetHours='ResetHours';WeeklyDate='WeeklyDate';PrimaryAlert='PrimaryAlert';SecondaryAlert='SecondaryAlert';ResetAlert='ResetAlert'}
-    SharedClaude=@{Refresh='ReadInterval';ResetHours='ResetHours';WeeklyDate='WeeklyDate';PrimaryAlert='PrimaryAlert';SecondaryAlert='SecondaryAlert';ResetAlert='ResetAlert'}
+    Claude=@{Credits='Credits';Refresh='Interval';ResetHours='ResetHours';WeeklyDate='WeeklyDate';PrimaryAlert='PrimaryAlert';SecondaryAlert='SecondaryAlert';ResetAlert='ResetAlert'}
+    SharedClaude=@{Credits='Credits';Refresh='ReadInterval';ResetHours='ResetHours';WeeklyDate='WeeklyDate';PrimaryAlert='PrimaryAlert';SecondaryAlert='SecondaryAlert';ResetAlert='ResetAlert'}
 }
 $script:AccountCustomSettings=@{}
 $script:AccountUseDefaults=@{}
@@ -54,6 +54,11 @@ function Initialize-AccountDefaults {
         foreach ($group in $script:AccountDefaultGroups.Keys) {
             $saved=$State.accountDefaultPreferences.$account.Use.$group
             if ($saved -is [bool]) { $script:AccountUseDefaults[$account][$group]=$saved }
+        }
+        # Extend an existing all-default Claude choice to the newly supported credit group on first upgrade.
+        if ($account -in @('Claude','SharedClaude')) {
+            $options=if ($account -eq 'Claude') {$State.claude} else {$State.sharedClaude}
+            if ($null -eq $options.Credits -and $script:AccountUseDefaults[$account].Refresh -and $script:AccountUseDefaults[$account].Reset -and $script:AccountUseDefaults[$account].Notifications) { $script:AccountUseDefaults[$account].Credits=$true }
         }
     }
     Set-EffectiveAccountDefaults
@@ -110,7 +115,7 @@ function Add-GeneralDefaultsControls {
         elseif ($key -eq 'Credits') { $choices=@('When credits exist','Always show','Off');$control=New-SettingsChoice $choices $choices[[array]::IndexOf($values.Credits,$value)] }
         elseif ($value -is [bool]) { $control=[Windows.Forms.CheckBox]::new();$control.AutoSize=$true;$control.Checked=$value }
         else { $control=[Windows.Forms.NumericUpDown]::new();$control.Maximum=if ($key -eq 'ResetHours') {168} else {100};$control.Value=$value }
-        $label=switch ($key) {Refresh {'Default refresh'} Credits {'Default Codex credits'} ResetHours {'5-hour times: hours ahead'} WeeklyDate {'Show weekly reset date and time'} PrimaryAlert {'5-hour warning below %'} SecondaryAlert {'Weekly warning below %'} ResetAlert {'Notify when the 5-hour window resets'}}
+        $label=switch ($key) {Refresh {'Default refresh'} Credits {'Default credit display'} ResetHours {'5-hour times: hours ahead'} WeeklyDate {'Show weekly reset date and time'} PrimaryAlert {'5-hour warning below %'} SecondaryAlert {'Weekly warning below %'} ResetAlert {'Notify when the 5-hour window resets'}}
         $Controls['Default'+$key]=$control
         if ($control -is [Windows.Forms.CheckBox]) {$control.Text=$label;Add-SettingsRow $Tables.Defaults '' $control}
         else {Add-SettingsRow $Tables.Defaults $label $control}
@@ -120,14 +125,13 @@ function Add-GeneralDefaultsControls {
     $maps=@{
         Local=@{Table='General';Refresh='Refresh';Credits='Credits';ResetHours='ResetHours';WeeklyDate='WeeklyDate';PrimaryAlert='PrimaryAlert';SecondaryAlert='SecondaryAlert';ResetAlert='ResetAlert'}
         Remote=@{Table='Shared';Refresh='ReadInterval';Credits='SharedCredits';ResetHours='SharedResetHours';WeeklyDate='SharedWeeklyDate';PrimaryAlert='SharedPrimaryAlert';SecondaryAlert='SharedSecondaryAlert';ResetAlert='SharedResetAlert'}
-        Claude=@{Table='Claude';Refresh='ClaudeInterval';ResetHours='ClaudeResetHours';WeeklyDate='ClaudeWeeklyDate';PrimaryAlert='ClaudePrimaryAlert';SecondaryAlert='ClaudeSecondaryAlert';ResetAlert='ClaudeResetAlert'}
-        SharedClaude=@{Table='Shared Claude';Refresh='SharedClaudeReadInterval';ResetHours='SharedClaudeResetHours';WeeklyDate='SharedClaudeWeeklyDate';PrimaryAlert='SharedClaudePrimaryAlert';SecondaryAlert='SharedClaudeSecondaryAlert';ResetAlert='SharedClaudeResetAlert'}
+        Claude=@{Credits='ClaudeCredits';Table='Claude';Refresh='ClaudeInterval';ResetHours='ClaudeResetHours';WeeklyDate='ClaudeWeeklyDate';PrimaryAlert='ClaudePrimaryAlert';SecondaryAlert='ClaudeSecondaryAlert';ResetAlert='ClaudeResetAlert'}
+        SharedClaude=@{Credits='SharedClaudeCredits';Table='Shared Claude';Refresh='SharedClaudeReadInterval';ResetHours='SharedClaudeResetHours';WeeklyDate='SharedClaudeWeeklyDate';PrimaryAlert='SharedClaudePrimaryAlert';SecondaryAlert='SharedClaudeSecondaryAlert';ResetAlert='SharedClaudeResetAlert'}
     }
     $bindings=@{}
     foreach ($account in $maps.Keys) {
         $bindings[$account]=@{}
         foreach ($group in @('Refresh','Reset','Notifications','Credits')) {
-            if ($group -eq 'Credits' -and $account -in @('Claude','SharedClaude')) {continue}
             $check=[Windows.Forms.CheckBox]::new();$check.Text='Use General defaults: '+$group;$check.AutoSize=$true;$check.Checked=$script:AccountUseDefaults[$account][$group]
             $Controls[$account+'Use'+$group]=$check
             $entry=@{Check=$check;Items=@{};Custom=@{};Previous=$false}

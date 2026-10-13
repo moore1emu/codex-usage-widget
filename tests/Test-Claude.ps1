@@ -20,6 +20,15 @@ try {
         try {[void](ConvertTo-ClaudeUsage @{five_hour=@{utilization=$value}})} catch {$rejected=$true}
         if (-not $rejected) {throw 'Invalid Claude utilization was accepted.'}
     }
+    # Prepaid credits use minor currency units; a monthly spend cap never substitutes for the balance.
+    $prepaid=ConvertTo-ClaudeUsage @{prepaid_credits=@{amount=1234;currency='usd'};extra_usage=@{monthly_limit=10000;used_credits=3000}}
+    if ($prepaid.credits.balance -ne '12.34' -or $prepaid.credits.currency -ne 'USD' -or (Get-CreditLabel -Credits $prepaid.credits) -ne 'Credits: $12.34') { throw 'Claude prepaid units or currency formatting changed.' }
+    foreach ($invalid in @(@{amount=-1;currency='USD'},@{amount='NaN';currency='USD'},@{amount=1200;currency='not-a-currency'},@{amount=$null;currency='USD'})) {
+        $result=ConvertTo-ClaudeUsage @{five_hour=@{utilization=20};prepaid_credits=$invalid}
+        if ($result.credits -or $result.primary.usedPercent -ne 20) { throw 'Invalid prepaid data blocked quotas or fabricated a balance.' }
+    }
+    $zero=ConvertTo-ClaudeUsage @{prepaid_credits=@{amount=0;currency='EUR'}}
+    if ($zero.credits.balance -ne '0' -or $zero.credits.hasCredits -or (Get-CreditLabel -Credits $zero.credits) -notlike '*0*EUR') { throw 'Zero currency balance was lost.' }
     # Exercise JSON's automatic DateTime conversion and every supported timestamp representation.
     $instant = [DateTimeOffset]::Now.AddHours(2)
     $epoch = $instant.ToUnixTimeSeconds()
@@ -67,6 +76,16 @@ try {
     $script:LocalEnabled=$false;Show-ClaudeWidget;$trayOpenItem.PerformClick()
     if ($script:SelectedAccount -ne 'Remote' -or $trayIcon.Text -notlike ('*'+$script:RemoteDisplayName+'*')) { throw 'Opening Codex did not select the enabled shared account.' }
     $script:LocalEnabled=$true
+    # Real panel and mini text preserve currency, independent visibility, and tray balance display.
+    $script:ClaudeUsage.credits=$prepaid.credits
+    $script:ClaudeOptions.Credits='Available'; Update-Display; $window.UpdateLayout()
+    $card=$script:AccountCards.Claude
+    if ($card.Bindings.creditsText.Text -ne '$12.34' -or $card.Bindings.compactCreditsText.Text -ne '$12.34') { throw 'Claude display rounded or lost its currency balance.' }
+    Show-ClaudeWidget
+    if ($trayIcon.Text -notlike '*$12.34*') { throw 'Claude tray hover lost its credits.' }
+    $script:ClaudeOptions.Credits='Off'; Update-Display
+    if ($card.Bindings.creditsArea.Visibility -ne 'Collapsed') { throw 'Claude credit Off setting was ignored.' }
+    $script:ClaudeOptions.Credits='Available'; $script:ClaudeUsage.credits=$null
     # Disabling credits releases the blank row instead of retaining stale reservations.
     $script:CreditDisplayMode='Off';$script:SharedCreditDisplayMode='Off';Update-Display;$window.UpdateLayout()
     if ($script:AccountCards.Claude.Visual.Child.RowDefinitions[3].MinHeight -ne 0) { throw 'Hidden credits retained reserved space.' }
@@ -93,7 +112,7 @@ try {
                 $actualPoint=$actual.TranslatePoint([Windows.Point]::new(0,0),$card.Container)
                 if ([Math]::Abs($actualPoint.Y-$expectedPoint.Y) -gt 1 -or $actual.Visibility -ne $expected.Visibility) { throw ('Connected row drift: '+$key+' '+$controlName+' at '+($bounds -join 'x')) }
                 if ($controlName -like '*Percent' -and $actual.FontSize -ne $expected.FontSize) { throw 'Connected percentages used different font sizes.' }
-                if (-not $mini -and $controlName -like '*Percent' -and [Math]::Abs($actualPoint.X-$expectedPoint.X) -gt 1) { throw 'Connected value columns used different offsets.' }
+                if (-not $mini -and $controlName -like '*Percent' -and [Math]::Abs($actualPoint.X-$expectedPoint.X) -gt 1) { throw ('Connected value column drift: '+$key+' '+$controlName+' at '+($bounds -join 'x')+'; '+$actualPoint.X+' versus '+$expectedPoint.X) }
             }
         }
         if ($mini -and $script:AccountCards.Claude.Bindings.compactCreditsPanel.Visibility -ne 'Hidden') { throw 'Claude did not retain an invisible credit slot.' }

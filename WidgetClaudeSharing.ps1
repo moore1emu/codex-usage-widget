@@ -12,6 +12,7 @@ $script:SharedClaudeOptions=@{
     Placement='Follow layout'
     ResetHours=25
     WeeklyDate=$true
+    Credits='Available'
     PrimaryAlert=0
     SecondaryAlert=0
     ResetAlert=$false
@@ -58,6 +59,7 @@ function Restore-SharedClaudeSettings {
         $max=if ($key -eq 'ResetHours') {168} else {100}
         if (($saved.$key -is [int] -or $saved.$key -is [long]) -and $saved.$key -ge 0 -and $saved.$key -le $max) {$script:SharedClaudeOptions[$key]=[int]$saved.$key}
     }
+    if ($saved.Credits -in @('Available','Always','Off')) { $script:SharedClaudeOptions.Credits=$saved.Credits }
     if ($saved.SourceId -match '^[0-9a-f]{32}$') {$script:SharedClaudeOptions.SourceId=$saved.SourceId}
     if ($saved.Placement -in @('Follow layout','Attached','Separate window')) {$script:SharedClaudeOptions.Placement=$saved.Placement}
     if ($script:ColorSchemes.Contains([string]$saved.Scheme)) {$script:SharedClaudeOptions.Scheme=$saved.Scheme}

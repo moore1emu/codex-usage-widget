@@ -109,6 +109,11 @@ function ConvertTo-SharedUsage {
             $balanceText = $balance.ToString([Globalization.CultureInfo]::InvariantCulture)
         }
         $snapshot.credits = @{ balance=$balanceText; hasCredits=($Usage.credits.hasCredits -eq $true); unlimited=($Usage.credits.unlimited -eq $true) }
+        # Preserve optional currency units for Claude without changing existing unitless Codex snapshots.
+        if ($null -ne $Usage.credits.currency) {
+            if ($Usage.credits.currency -isnot [string] -or $Usage.credits.currency -notmatch '^[A-Z]{3}$') { throw 'The credit currency is invalid.' }
+            $snapshot.credits.currency=[string]$Usage.credits.currency
+        }
     }
     return [pscustomobject]$snapshot
 }
@@ -127,6 +132,8 @@ function Get-SharedUsageKey {
     }
     $credits = $Snapshot.credits
     $values.credits = if ($null -eq $credits) { $null } else { [ordered]@{balance=$credits.balance;hasCredits=$credits.hasCredits;unlimited=$credits.unlimited} }
+    # Include currency changes in change-only publication while keeping legacy snapshots compatible.
+    if ($null -ne $credits.currency) { $values.credits.currency=$credits.currency }
     return ($values | ConvertTo-Json -Depth 5 -Compress)
 }
 
