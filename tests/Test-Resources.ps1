@@ -2,7 +2,7 @@
 . (Join-Path $PSScriptRoot 'Initialize-TestWidget.ps1')
 function Assert-Resource($Condition,[string]$Message) { if (-not $Condition) { throw $Message } }
 Assert-Resource ((Format-ResourceMemory 1000000000) -eq '1000 MB') 'Threshold should stay in MB.'
-Assert-Resource ((Format-ResourceMemory 1280000000) -eq '1.28 GB') 'RAM should switch to decimal GB.'
+Assert-Resource ((Format-ResourceMemory 1280000000) -eq '1 GB') 'RAM should switch to decimal GB.'
 # Give the widget a child within Codex's tree to verify neither enters app totals.
 $created=[datetime]'2026-01-01'
 $script:FakeProcesses=@(
@@ -35,6 +35,7 @@ function Get-CimInstance {
 $sample=Get-AppResourceSnapshot -WidgetProcessId 20 -SessionId 2
 Assert-Resource ($sample.Local.Count -eq 3 -and $sample.Local.Memory -eq 3000000) 'App grouping included unrelated or widget processes.'
 Assert-Resource ($sample.Local.Gpu -eq 50) 'GPU should report the busiest combined engine.'
+Assert-Resource ((Format-ResourceMemory 1280000000 -Detailed) -eq '1.28 GB') 'Detailed memory should retain its precision.'
 Assert-Resource ([Math]::Abs($sample.Local.Cpu-(60/[Environment]::ProcessorCount)) -lt 0.001) 'CPU must normalize across logical processors.'
 $script:NoGpu=$true
 $sample=Get-AppResourceSnapshot -WidgetProcessId 20 -SessionId 2
@@ -45,9 +46,9 @@ $script:ResourceReadings.Local=@{Available=$true;Cpu=3;Memory=1280000000;Gpu=1;C
 $script:ResourceReadings.Claude=@{Available=$true;Cpu=2;Memory=610000000;Gpu=0;Count=3;SampledAt=[DateTimeOffset]::Now}
 $row=New-ResourceRow
 [void](Update-ResourceRow $row Local 110 300)
-Assert-Resource ($row.Items[0].Text -eq 'CPU 3%' -and $row.Host.Visibility -eq 'Visible') 'Labeled resources should be visible.'
+Assert-Resource ($row.Items[0].Text -eq '3%' -and $row.Labels[0].Visibility -eq 'Visible' -and $row.Host.Visibility -eq 'Visible') 'Labeled resources should be visible.'
 [void](Update-ResourceRow $row Local 30 50 -HideLabels)
-Assert-Resource ($row.Items[0].Text -eq '3%' -and $row.Items[1].Text -eq '1.28GB' -and $row.Items[2].Text -eq '1%' -and $row.Host.Visibility -eq 'Visible') 'Mini resources must retain all three values without labels.'
+Assert-Resource ($row.Items[0].Text -eq '3%' -and $row.Items[1].Text -eq '1GB' -and $row.Items[2].Text -eq '1%' -and $row.Host.Visibility -eq 'Visible') 'Mini resources must retain all three values without labels.'
 [void](Update-ResourceRow $row Local 110 14 -HideLabels -SingleLine)
 Assert-Resource ($row.Host.Visibility -eq 'Visible' -and $row.Panel.Orientation -eq 'Horizontal') 'Thin views must retain the full resource group on one line.'
 # Check every connected layout through full, narrow, mini, and menu-height dimensions.
@@ -75,9 +76,22 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
                 }
                 Assert-Resource ($bindings.compactPrimaryCaption.FontSize -eq $bindings.compactPrimaryPercent.FontSize) 'Compact labels should match their numeric font size.'
             }
-            Assert-Resource (($card.Resources.Items[0].Text -match 'CPU') -eq $quotaLabels) 'Resource names must follow the actual 5-hour label visibility.'
+            Assert-Resource (($card.Resources.Labels[0].Visibility -eq 'Visible') -eq $quotaLabels) 'Resource names must follow the actual 5-hour label visibility.'
             Assert-Resource ($card.Resources.Host.ActualWidth -le $card.Container.ColumnDefinitions[1].Width.Value+0.1 -and $card.Resources.Host.ActualHeight -gt 0) 'Resource group should stay inside its column with actual drawing height.'
             foreach ($item in $card.Resources.Items) { Assert-Resource ($item.IsVisible -and $item.ActualWidth -gt 0 -and $item.ActualHeight -gt 0) 'Every hardware value must have visible text bounds.' }
+            # Quota names and values have independent, stable left edges in full and compact rows.
+            if ($bindings.primaryArea.Visibility -eq 'Visible' -or ($bindings.ultraCompactPanel.Visibility -eq 'Visible' -and $quotaLabels)) {
+                $names=if ($bindings.primaryArea.Visibility -eq 'Visible') {@($bindings.primaryLabel,$bindings.secondaryLabel)} else {@($bindings.compactPrimaryCaption,$bindings.compactSecondaryCaption)}
+                $values=if ($bindings.primaryArea.Visibility -eq 'Visible') {@($bindings.primaryPercent,$bindings.secondaryPercent)} else {@($bindings.compactPrimaryPercent,$bindings.compactSecondaryPercent)}
+                if ($bindings.creditsArea.Visibility -eq 'Visible') {$names+=$bindings.creditsLabel;$values+=$bindings.creditsText}
+                foreach ($column in @(@{Items=$names},@{Items=$values})) {
+                    $reference=$column.Items[0].TranslatePoint([Windows.Point]::new(0,0),$card.Container).X
+                    foreach ($text in $column.Items) {
+                        $left=$text.TranslatePoint([Windows.Point]::new(0,0),$card.Container).X
+                        Assert-Resource ([Math]::Abs($left-$reference) -lt 1) 'Quota column first characters did not line up.'
+                    }
+                }
+            }
             # Compare actual drawn centers after WPF transforms, including narrow RAM scaling.
             if ($card.Resources.Aligned.Visibility -eq 'Visible') {
                 $targets=if ($bindings.ultraCompactPanel.Visibility -eq 'Visible') { @($bindings.compactPrimaryPercent,$bindings.compactSecondaryPercent,$bindings.compactCreditsText) } else { @($bindings.primaryPercent,$bindings.secondaryPercent,$bindings.creditsText) }
@@ -86,7 +100,12 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
                     $actual=$item.TranslatePoint([Windows.Point]::new(0,$item.ActualHeight/2),$card.Container).Y
                     # Text with different lengths must start at the same hardware-column edge.
                     $left=$item.TranslatePoint([Windows.Point]::new(0,0),$card.Resources.Host).X
-                    Assert-Resource ([Math]::Abs($left-3) -lt 1) 'CPU, RAM and GPU should share the same left edge.'
+                    $referenceLeft=$card.Resources.Items[0].TranslatePoint([Windows.Point]::new(0,0),$card.Resources.Host).X
+                    Assert-Resource ([Math]::Abs($left-$referenceLeft) -lt 1) 'Hardware values should share the same first-character position.'
+                    if ($quotaLabels) {
+                        $nameLeft=$card.Resources.Labels[$index].TranslatePoint([Windows.Point]::new(0,0),$card.Resources.Host).X
+                        Assert-Resource ([Math]::Abs($nameLeft-3) -lt 1) 'Hardware names should share the same left edge.'
+                    }
                     if ($index -eq 2 -and $bindings.creditsArea.Visibility -ne 'Visible' -and $bindings.ultraCompactPanel.Visibility -ne 'Visible') {
                         $grid=$bindings.outerBorder.Child
                         Assert-Resource ($grid.RowDefinitions[3].ActualHeight -ge 27) 'GPU needs a reserved credit track when no balance exists.'
@@ -99,6 +118,13 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
 
         }
         if ($layout -ne 'Account picker') { Assert-Resource ($cards[0].Container.ColumnDefinitions[1].Width.Value -eq $cards[1].Container.ColumnDefinitions[1].Width.Value) 'Connected resource columns must stay aligned.' }
+        # Different memory units must not shift the hardware value column between connected accounts.
+        if ($layout -ne 'Account picker' -and $cards[0].Resources.Aligned.Visibility -eq 'Visible') {
+            $first=$cards[0].Resources.Items[0].TranslatePoint([Windows.Point]::new(0,0),$cards[0].Container).X
+            $second=$cards[1].Resources.Items[0].TranslatePoint([Windows.Point]::new(0,0),$cards[1].Container).X
+            Assert-Resource ([Math]::Abs($first-$second) -lt 1) 'Connected hardware values used different column starts.'
+        }
+
     }
 }
 # Detached Claude uses the same persistent column even at its mini size.

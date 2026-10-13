@@ -62,6 +62,8 @@ function Restore-CompactAccountRows {
         foreach ($child in $row.Children) { [void]$row.Parent.Children.Add($child) }
         $row.Caption.Margin=[Windows.Thickness]::new(0)
         $row.Parent.Margin=[Windows.Thickness]::new(0)
+        $row.Parent.HorizontalAlignment='Center'; $row.Caption.Width=[double]::NaN
+        foreach ($child in $row.Children) { $child.HorizontalAlignment='Center' }
     }
 }
 
@@ -88,30 +90,35 @@ function Show-CompactAccountRows {
     }
     # Preserve countdowns while they physically fit below all retained values.
     if ($needed+12 -gt $Height) { foreach ($reset in $resets) { $reset.Visibility='Collapsed' } }
-    $required=0
+    $required=0; $labelWidth=0; $valueWidth=0
     # Measure complete rows at the current numeric size, hiding all labels together if they cannot fit.
     for ($index=0;$index -lt 3;$index++) {
         $row=$Card.CompactRows[$index]
         $row.Caption.FontSize=$font; $row.Caption.Foreground=$Colors[$index]
         $row.Caption.Visibility='Visible'
         $row.Caption.Measure($measure); $row.Value.Measure($measure)
-        if ($row.Parent.Visibility -ne 'Collapsed') { $required=[Math]::Max($required,$row.Caption.DesiredSize.Width+$row.Value.DesiredSize.Width+5) }
+        if ($row.Parent.Visibility -ne 'Collapsed') { $labelWidth=[Math]::Max($labelWidth,$row.Caption.DesiredSize.Width); $valueWidth=[Math]::Max($valueWidth,$row.Value.DesiredSize.Width) }
     }
+    $required=$labelWidth+$valueWidth+5
     # Use the widest connected account so all panels drop labels together.
     if ($script:SharedAccountLayout) {
-        if ($script:ProbingAccountLayout) { $script:SharedAccountLayout.CompactRowWidth=[Math]::Max([double]$script:SharedAccountLayout.CompactRowWidth,$required) }
-        else { $required=[double]$script:SharedAccountLayout.CompactRowWidth }
+        if ($script:ProbingAccountLayout) { $script:SharedAccountLayout.CompactRowWidth=[Math]::Max([double]$script:SharedAccountLayout.CompactRowWidth,$required); $script:SharedAccountLayout.CompactLabelWidth=[Math]::Max([double]$script:SharedAccountLayout.CompactLabelWidth,$labelWidth) }
+        else { $required=[double]$script:SharedAccountLayout.CompactRowWidth; $labelWidth=[double]$script:SharedAccountLayout.CompactLabelWidth }
     }
     $showLabels=$required+12 -le $Width
     # Leave countdowns beneath their quota row and keep Credits beside its balance.
     for ($index=0;$index -lt 3;$index++) {
         $row=$Card.CompactRows[$index]
         $row.Parent.Children.Remove($row.Caption); $row.Parent.Children.Remove($row.Value)
-        $row.Line.Orientation='Horizontal'; $row.Line.HorizontalAlignment='Center'
+        $row.Line.Orientation='Horizontal'; $row.Line.HorizontalAlignment='Left'
         $row.Caption.Visibility=if ($showLabels) {'Visible'} else {'Collapsed'}
+        # Fixed caption widths align the first digit, not the final digit, in every quota row.
+        $row.Caption.Width=$labelWidth; $row.Caption.HorizontalAlignment='Left'; $row.Value.HorizontalAlignment='Left'
         $row.Caption.Margin=[Windows.Thickness]::new(0,0,5,0)
         [void]$row.Line.Children.Add($row.Caption); [void]$row.Line.Children.Add($row.Value)
         $row.Parent.Children.Insert(0,$row.Line)
+        $row.Parent.HorizontalAlignment='Left'
+        foreach ($child in $row.Children) { $child.HorizontalAlignment='Left' }
         $row.Parent.VerticalAlignment='Center'; $row.Parent.Margin=[Windows.Thickness]::new(0,0,0,1)
         [Windows.Controls.Grid]::SetRow($row.Parent,$index); [Windows.Controls.Grid]::SetColumn($row.Parent,0)
     }
@@ -273,7 +280,7 @@ function Render-AccountCard {
             $quotaLabels=$inlineUsagePanel.Child.Children[1].Visibility -eq 'Visible'
             $resourceFont=$inlineUsagePanel.Child.Children[2].FontSize
         }
-        [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $Height -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -Colors $colors -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
+        [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $Height -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -Colors $colors -SharedLayout $SharedLayout -ProbeLayout:$ProbeLayout -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
         # Match CPU/RAM/GPU to the quota tracks instead of centering them as an unrelated cluster.
         if ($Card.Resources.Host.Visibility -eq 'Visible' -and $inlineUsagePanel.Visibility -ne 'Visible') { Enable-AlignedResourceRows $Card.Resources }
         # Keep account borders and actions in the shared window instead of duplicating them.
@@ -384,7 +391,7 @@ function Update-AccountViews {
         $resourceEnabled=('Local' -in $keys -and $script:ResourceOptions.Local) -or ('Claude' -in $keys -and $script:ResourceOptions.Claude)
         $resourceCardWidth=if ($script:AccountLayout -eq 'Side by side') {($width-($keys.Count-1))/$keys.Count} else {$width}
         $resourceWidth=if ($resourceEnabled) {[Math]::Min(110,$resourceCardWidth*0.44)} else {0}
-        @{ResourceWidth=$resourceWidth;Widths=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
+        @{ResourceWidth=$resourceWidth;Widths=@{};Labels=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
     } else { $null }
     $passes = if ($sharedLayout) { @('Measure','Apply') } else { @('Apply') }
     foreach ($pass in $passes) {

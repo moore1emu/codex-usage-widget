@@ -13,3 +13,5 @@
 - Keep desktop CPU/RAM/GPU collection off the UI thread and outside shared JSON. Group verified local desktop descendants, exclude the widget and its helpers, and use synthetic process/counter fixtures in resource tests. Keep enabled hardware values visible at every size, with labels following the 5-hour label visibility; align CPU/RAM/GPU with the 5-hour/weekly/credits tracks, scaling readings uniformly within their rows in tight spaces. Preserve the single-line group at menu height.
 
 - Treat Claude subscription prepaid credits as a currency balance, separate from monthly spending caps and Console/API credits. Billing reads must use the same signed-in organization as quotas and fail independently; share only validated amount/currency fields. Keep unitless Codex credit formatting unchanged.
+
+- Keep usage names/values and hardware names/values in four left-aligned columns. Render whole-number credits and RAM in the widget, preserving original precision and currency in hover details and shared data.

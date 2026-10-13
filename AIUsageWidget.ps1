@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.8.0'
+$script:WidgetVersion = '2.8.1'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -1010,9 +1010,9 @@ function Update-ResponsiveLayout {
     foreach ($density in @('Full','ShortLabels','SmallType','NarrowBars')) {
         $primaryLabel.Text = '5-hour'
         $secondaryLabel.Text = 'Weekly'
-        # Drop redundant "left" text and reduce both labels and numbers only at the narrowest bar size.
-        $primaryPercent.Text = if ($density -eq 'NarrowBars' -or $primaryValue -notmatch '%$') { $primaryValue } else { $primaryValue + ' left' }
-        $secondaryPercent.Text = if ($density -eq 'NarrowBars' -or $secondaryValue -notmatch '%$') { $secondaryValue } else { $secondaryValue + ' left' }
+        # Keep quota values concise and reduce both labels and numbers at the narrowest bar size.
+        $primaryPercent.Text = $primaryValue
+        $secondaryPercent.Text = $secondaryValue
         $primaryPercent.FontSize = if ($density -eq 'NarrowBars') { 13 } elseif ($density -eq 'SmallType') { 15 } else { 18 }
         $secondaryPercent.FontSize = $primaryPercent.FontSize
         $creditsText.FontSize = $primaryPercent.FontSize
@@ -1031,15 +1031,19 @@ function Update-ResponsiveLayout {
             if ($script:ProbingAccountLayout) {
                 $script:SharedAccountLayout.Widths[$density] = [Math]::Max($script:SharedAccountLayout.Widths[$density],$requiredWidth)
                 $script:SharedAccountLayout.Values[$density] = [Math]::Max($script:SharedAccountLayout.Values[$density],$valueWidth)
+                $script:SharedAccountLayout.Labels[$density] = [Math]::Max($script:SharedAccountLayout.Labels[$density],$labelWidth)
             } else {
+                $labelWidth = $script:SharedAccountLayout.Labels[$density]
                 $requiredWidth = $script:SharedAccountLayout.Widths[$density]
                 $valueWidth = $script:SharedAccountLayout.Values[$density]
             }
         }
         foreach ($area in @($primaryArea,$secondaryArea,$creditsArea)) {
             # Connected measurements own this width; a hidden currency row must not retain WPF's previous shared size.
-            if ($script:SharedAccountLayout) { $area.ColumnDefinitions[1].ClearValue([Windows.Controls.ColumnDefinition]::SharedSizeGroupProperty) }
-            else { $area.ColumnDefinitions[1].SharedSizeGroup='UsageValue' }
+            $area.ColumnDefinitions[1].ClearValue([Windows.Controls.ColumnDefinition]::SharedSizeGroupProperty)
+            # Keep name and value starts fixed while the bar still spans the full available width.
+            $area.ColumnDefinitions[0].Width=[Windows.GridLength]::new($labelWidth+8)
+            $area.ColumnDefinitions[1].Width=[Windows.GridLength]::new(1,[Windows.GridUnitType]::Star)
             $area.ColumnDefinitions[1].MinWidth = if ($script:SharedAccountLayout -and -not $script:ProbingAccountLayout) { $valueWidth } else { 0 }
         }
         if (-not $script:ProbingAccountLayout -and $requiredWidth + 14 -le $window.ActualWidth) { break }
@@ -1466,12 +1470,12 @@ function Update-Display {
     $creditsExist = $creditData -and ($creditData.unlimited -eq $true -or ($hasBalance -and $balance -gt 0))
     $script:CreditsVisible = $script:CreditDisplayMode -eq 'Always' -or ($script:CreditDisplayMode -eq 'Available' -and $creditsExist)
     $creditLabel = Get-CreditLabel
-    # Use matching label/value columns, with a rounded whole-number credit total.
+    # Keep visible credit totals whole and unit-free; hover retains currency and precise balance.
     # Keep unknown balances as a short value so their explanation cannot force compact quota rows.
-    $creditsText.Text = if ($creditLabel -match 'unavailable$') { '—' } else { $creditLabel -replace '^Credits: ', '' }
+    $creditsText.Text = if ($hasBalance) { $balance.ToString('0',[Globalization.CultureInfo]::CurrentCulture) } elseif ($creditLabel -match 'unavailable$') { '—' } else { $creditLabel -replace '^Credits: ', '' }
     $creditsText.ToolTip = $creditLabel
     # Use a short numeric placeholder for unknown balances in the smallest badge.
-    $compactCreditsText.Text = if ($creditData.unlimited -eq $true) { '∞' } elseif ($hasBalance -and $creditData.currency) { $creditLabel -replace '^Credits: ','' } elseif ($hasBalance) { $balance.ToString('0', [Globalization.CultureInfo]::CurrentCulture) } elseif ($creditData.hasCredits -eq $false) { '0' } else { '—' }
+    $compactCreditsText.Text = if ($creditData.unlimited -eq $true) { '∞' } elseif ($hasBalance) { $balance.ToString('0', [Globalization.CultureInfo]::CurrentCulture) } elseif ($creditData.hasCredits -eq $false) { '0' } else { '—' }
     $compactCreditsText.ToolTip = $creditLabel
 
     # Show remaining five-hour quota when the window is available.

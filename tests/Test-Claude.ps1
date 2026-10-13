@@ -80,7 +80,7 @@ try {
     $script:ClaudeUsage.credits=$prepaid.credits
     $script:ClaudeOptions.Credits='Available'; Update-Display; $window.UpdateLayout()
     $card=$script:AccountCards.Claude
-    if ($card.Bindings.creditsText.Text -ne '$12.34' -or $card.Bindings.compactCreditsText.Text -ne '$12.34') { throw 'Claude display rounded or lost its currency balance.' }
+    if ($card.Bindings.creditsText.Text -ne '12' -or $card.Bindings.compactCreditsText.Text -ne '12' -or $card.Bindings.creditsText.ToolTip -notlike '*$12.34*') { throw 'Claude whole-number display lost its precise currency hover details.' }
     Show-ClaudeWidget
     if ($trayIcon.Text -notlike '*$12.34*') { throw 'Claude tray hover lost its credits.' }
     $script:ClaudeOptions.Credits='Off'; Update-Display

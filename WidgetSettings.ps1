@@ -304,7 +304,7 @@ function Show-WidgetSettings {
     # Use the same credit visibility choices for this account's prepaid currency balance.
     $controls.ClaudeCredits=New-SettingsChoice @('When credits exist','Always show','Off') @{'Available'='When credits exist';'Always'='Always show';'Off'='Off'}[$script:ClaudeOptions.Credits]
     Add-SettingsRow $tables.Claude 'Credit display' $controls.ClaudeCredits
-    Set-SettingsHelp $settingsToolTip $controls.ClaudeCredits 'Shows the Claude subscription prepaid balance, with currency and two decimals. Monthly spending caps and API credits are separate.'
+    Set-SettingsHelp $settingsToolTip $controls.ClaudeCredits 'Shows the Claude subscription prepaid balance as a whole number. Hover retains currency and two decimals. Monthly spending caps and API credits are separate.'
     $controls.ClaudeInterval=New-SettingsChoice $widgetChoices $widgetChoices[@(1,5,15,30,0).IndexOf($script:ClaudeOptions.Interval)]
     Add-SettingsRow $tables.Claude 'Claude refresh' $controls.ClaudeInterval
     foreach ($entry in @(@{Key='ResetHours';Label='5-hour times: hours ahead';Max=168},@{Key='PrimaryAlert';Label='5-hour warning below %';Max=100},@{Key='SecondaryAlert';Label='Weekly warning below %';Max=100})) {
@@ -348,7 +348,7 @@ function Show-WidgetSettings {
     # Use the same credit visibility choices for this account's prepaid currency balance.
     $controls.SharedClaudeCredits=New-SettingsChoice @('When credits exist','Always show','Off') @{'Available'='When credits exist';'Always'='Always show';'Off'='Off'}[$script:SharedClaudeOptions.Credits]
     Add-SettingsRow $tables['Shared Claude'] 'Credit display' $controls.SharedClaudeCredits
-    Set-SettingsHelp $settingsToolTip $controls.SharedClaudeCredits 'Shows the Claude subscription prepaid balance, with currency and two decimals. Monthly spending caps and API credits are separate.'
+    Set-SettingsHelp $settingsToolTip $controls.SharedClaudeCredits 'Shows the Claude subscription prepaid balance as a whole number. Hover retains currency and two decimals. Monthly spending caps and API credits are separate.'
     foreach ($entry in @(@{Key='ResetHours';Label='5-hour times: hours ahead';Max=168},@{Key='PrimaryAlert';Label='5-hour warning below %';Max=100},@{Key='SecondaryAlert';Label='Weekly warning below %';Max=100})) {
         # Bound each numeric choice; zero turns the schedule or corresponding warning off.
         $numeric=[Windows.Forms.NumericUpDown]::new(); $numeric.Maximum=$entry.Max; $numeric.Value=$script:SharedClaudeOptions[$entry.Key]

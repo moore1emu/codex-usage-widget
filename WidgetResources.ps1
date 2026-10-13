@@ -65,10 +65,10 @@ function Get-AppResourceSnapshot {
 }
 
 function Format-ResourceMemory {
-    param([double]$Bytes)
-    # Use the requested decimal threshold: above 1,000 MB becomes GB with two decimals.
+    param([double]$Bytes,[switch]$Detailed)
+    # Keep the requested MB/GB threshold; show whole numbers while hover details can retain precision.
     $mb=$Bytes/1000000
-    if ($mb -gt 1000) { return ('{0:0.00} GB' -f ($mb/1000)) }
+    if ($mb -gt 1000) { return $(if ($Detailed) { '{0:0.00} GB' -f ($mb/1000) } else { '{0:0} GB' -f ($mb/1000) }) }
     return ('{0:0} MB' -f $mb)
 }
 
@@ -76,10 +76,17 @@ function New-ResourceRow {
     # Build independent text controls so labels can shrink without losing the colored values.
     $panel=[Windows.Controls.StackPanel]::new(); $panel.Orientation='Horizontal'
     $panel.HorizontalAlignment='Center'; $panel.Margin=[Windows.Thickness]::new(3,2,3,2); $panel.Visibility='Collapsed'
-    $items=@()
+    $items=@(); $labels=@(); $cells=@()
     foreach ($metric in @('CPU','RAM','GPU')) {
         $text=[Windows.Controls.TextBlock]::new(); $text.Foreground='#DDE3EF'; $text.FontSize=11
-        $text.Margin=[Windows.Thickness]::new(0,0,7,0); [void]$panel.Children.Add($text); $items+=$text
+        # Separate names and values into real columns rather than spacing a combined string.
+        $label=[Windows.Controls.TextBlock]::new(); $label.Text=$metric; $label.HorizontalAlignment='Left'
+        $cell=[Windows.Controls.Grid]::new(); $cell.HorizontalAlignment='Left'; $cell.Margin=[Windows.Thickness]::new(0,0,3,0)
+        [void]$cell.ColumnDefinitions.Add([Windows.Controls.ColumnDefinition]::new())
+        $valueColumn=[Windows.Controls.ColumnDefinition]::new(); $valueColumn.Width=[Windows.GridLength]::Auto; [void]$cell.ColumnDefinitions.Add($valueColumn)
+        [Windows.Controls.Grid]::SetColumn($text,1); $text.HorizontalAlignment='Left'
+        [void]$cell.Children.Add($label); [void]$cell.Children.Add($text)
+        [void]$panel.Children.Add($cell); $items+=$text; $labels+=$label; $cells+=$cell
     }
     $items[2].Margin=[Windows.Thickness]::new(0)
     # Scale the complete resource group at tiny sizes instead of hiding individual values.
@@ -94,33 +101,51 @@ function New-ResourceRow {
     }
     $container=[Windows.Controls.Grid]::new(); $container.Visibility='Collapsed'
     [void]$container.Children.Add($resourceHost); [void]$container.Children.Add($aligned)
-    return @{Panel=$panel;Host=$container;Group=$resourceHost;Aligned=$aligned;Boxes=$boxes;Items=$items}
+    return @{Panel=$panel;Host=$container;Group=$resourceHost;Aligned=$aligned;Boxes=$boxes;Items=$items;Labels=$labels;Cells=$cells;NaturalWidth=1}
 }
 
 function Update-ResourceRow {
-    param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$HideLabels,[double]$FontSize=11,[switch]$SingleLine,[string[]]$Colors)
+    param($Row,[string]$Key,[double]$Width,[double]$Height,[switch]$HideLabels,[double]$FontSize=11,[switch]$SingleLine,[string[]]$Colors,[hashtable]$SharedLayout,[switch]$ProbeLayout)
     # Enabled hardware values persist through every layout; unavailable readings retain their placeholders.
     $Row.Panel.Visibility='Collapsed'; $Row.Host.Visibility='Collapsed'
     # Restore the simple group before selecting the next responsive layout.
     foreach ($box in $Row.Boxes) { $box.Child=$null }
     $Row.Panel.Children.Clear()
-    foreach ($item in $Row.Items) { [void]$Row.Panel.Children.Add($item) }
+    foreach ($cell in $Row.Cells) { $cell.Width=[double]::NaN; [void]$Row.Panel.Children.Add($cell) }
     $Row.Group.Visibility='Visible'; $Row.Aligned.Visibility='Collapsed'
     if (-not $script:ResourceOptions[$Key]) { return 0 }
     $reading=$script:ResourceReadings[$Key]
     $available=$reading.Available -and ([DateTimeOffset]::Now-$reading.SampledAt).TotalSeconds -lt 15
     $values=if ($available) { @('{0:0}%' -f $reading.Cpu; Format-ResourceMemory $reading.Memory; $(if ($null -ne $reading.Gpu) {'{0:0}%' -f $reading.Gpu} else {'—'})) } else {@('—','—','—')}
     $labels=@('CPU','RAM','GPU')
+    $measure=[Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity)
+    $labelWidth=0; $valueWidth=0
     # Follow the quota label stage, preserving units while compacting unnecessary spaces and dots.
     for ($index=0;$index -lt 3;$index++) {
-        $item=$Row.Items[$index]; $item.FontSize=$FontSize
+        $item=$Row.Items[$index]; $item.FontSize=$FontSize; $item.Margin=[Windows.Thickness]::new(0)
         # Follow this account's quota palette: CPU uses 5-hour, RAM weekly, and GPU credits.
         if ($Colors.Count -eq 3) { $item.Foreground=$Colors[$index] }
         $item.FontWeight=if ($HideLabels) {'SemiBold'} else {'Normal'}
-        $item.Text=if ($HideLabels) {$values[$index] -replace ' ',''} else {$labels[$index]+' '+$values[$index]}
-        $item.ToolTip=$labels[$index]+': '+$values[$index]+$(if ($available) {"`nLocal desktop app and child processes: $($reading.Count)`nSampled $($reading.SampledAt.ToLocalTime().ToString('h:mm:ss tt'))"} else {"`nNo recent desktop resource reading"})
-        $item.Margin=[Windows.Thickness]::new(0,0,0,$(if ($index -eq 2) {0} else {1}))
+        $item.Text=if ($HideLabels) {$values[$index] -replace ' ',''} else {$values[$index]}
+        $caption=$Row.Labels[$index]; $caption.FontSize=$FontSize; $caption.Foreground=$item.Foreground
+        $caption.Visibility=if ($HideLabels) {'Collapsed'} else {'Visible'}
+        $caption.Measure($measure); $item.Measure($measure)
+        $labelWidth=[Math]::Max($labelWidth,$caption.DesiredSize.Width); $valueWidth=[Math]::Max($valueWidth,$item.DesiredSize.Width)
+        $detail=if ($index -eq 1 -and $available) {Format-ResourceMemory $reading.Memory -Detailed} else {$values[$index]}
+        $item.ToolTip=$labels[$index]+': '+$detail+$(if ($available) {"`nLocal desktop app and child processes: $($reading.Count)`nSampled $($reading.SampledAt.ToLocalTime().ToString('h:mm:ss tt'))"} else {"`nNo recent desktop resource reading"})
+        $caption.ToolTip=$item.ToolTip
     }
+    # Connected accounts measure one common hardware width so different MB/GB lengths cannot shift value starts.
+    if ($SharedLayout) {
+        if ($ProbeLayout) {
+            $SharedLayout.ResourceNameWidth=[Math]::Max([double]$SharedLayout.ResourceNameWidth,$labelWidth)
+            $SharedLayout.ResourceValueWidth=[Math]::Max([double]$SharedLayout.ResourceValueWidth,$valueWidth)
+        } else { $labelWidth=[double]$SharedLayout.ResourceNameWidth; $valueWidth=[double]$SharedLayout.ResourceValueWidth }
+    }
+    # Use one name-column width and one scale width for all hardware rows, preserving both left edges.
+    $nameTrack=if ($HideLabels) {0} else {$labelWidth+5}
+    $Row.NaturalWidth=$nameTrack+$valueWidth
+    foreach ($cell in $Row.Cells) { $cell.ColumnDefinitions[0].Width=[Windows.GridLength]::new($nameTrack) }
     # A one-line widget keeps the three readings in one line too; taller cards stack them vertically.
     $Row.Panel.Orientation=if ($SingleLine) {'Horizontal'} else {'Vertical'}
     if ($Row.Panel.Orientation -eq 'Horizontal') {
@@ -155,9 +180,8 @@ function Set-ResourceRowAlignment {
             $center=$target.TranslatePoint([Windows.Point]::new(0,$height/2),$row.Host).Y
         }
         # Position only when geometry changes, avoiding another layout cycle on steady countdown ticks.
-        # Size each scale box to its text so shorter CPU/GPU readings share RAM's left edge.
-        $row.Items[$index].Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
-        $box=$row.Boxes[$index]; $width=[Math]::Max(1,[Math]::Min($row.Items[$index].DesiredSize.Width,$row.Host.ActualWidth-6))
+        # Scale equal-width name/value grids so neither column shifts with different value lengths.
+        $box=$row.Boxes[$index]; $width=[Math]::Max(1,[Math]::Min($row.NaturalWidth,$row.Host.ActualWidth-6))
         if ([Math]::Abs($box.Width-$width) -gt 0.1 -or [double]::IsNaN($box.Width)) { $box.Width=$width }
         if ([Math]::Abs($box.Height-$height) -gt 0.1 -or [double]::IsNaN($box.Height)) { $box.Height=$height }
         $position=$center-$height/2
@@ -172,7 +196,9 @@ function Enable-AlignedResourceRows {
     $Row.Panel.Children.Clear()
     for ($index=0;$index -lt 3;$index++) {
         $Row.Items[$index].Margin=[Windows.Thickness]::new(0)
-        $Row.Boxes[$index].Child=$Row.Items[$index]
+        $Row.Cells[$index].Width=$Row.NaturalWidth
+        $Row.Cells[$index].Margin=[Windows.Thickness]::new(0)
+        $Row.Boxes[$index].Child=$Row.Cells[$index]
     }
     $Row.Group.Visibility='Collapsed'; $Row.Aligned.Visibility='Visible'
 }

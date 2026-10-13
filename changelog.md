@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.8.1 — October 13, 2026
+
+- Align usage names, usage values, hardware names and hardware values in four left-aligned columns, including compact labeled rows. Preserve full-width usage bars and quota/hardware row alignment.
+- Show whole-number credit totals and RAM readings without currency signs or decimals in the widget; retain precise currency balances and memory amounts on hover and in shared data.
+
 ## 2.8.0 — October 13, 2026
 
 - Add Claude subscription prepaid usage-credit balances to local/shared panels and tray hover, with currency and two decimal places. Reuse the signed-in Usage connection; an unavailable billing response does not block quota updates or invent a balance.
