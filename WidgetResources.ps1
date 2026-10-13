@@ -162,6 +162,9 @@ function Update-ResourceRow {
     foreach ($cell in $Row.Cells) { $cell.ColumnDefinitions[0].Width=[Windows.GridLength]::new($nameTrack) }
     # A one-line widget keeps the three readings in one line too; taller cards stack them vertically.
     $Row.Panel.Orientation=if ($SingleLine) {'Horizontal'} else {'Vertical'}
+    # Anchor the footer to its left edge instead of centering the scaled hardware group.
+    $Row.Group.HorizontalAlignment=if ($SingleLine) {'Left'} else {'Stretch'}
+    $Row.Panel.HorizontalAlignment=if ($SingleLine) {'Left'} else {'Center'}
     if ($Row.Panel.Orientation -eq 'Horizontal') {
         for ($index=0;$index -lt 3;$index++) { $Row.Items[$index].Margin=[Windows.Thickness]::new(0,0,$(if ($index -eq 2) {0} else {3}),0) }
     }

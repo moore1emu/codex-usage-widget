@@ -153,6 +153,9 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
             Assert-Resource ($card.ResourcePlacement -eq 'Bottom bar' -and [Windows.Controls.Grid]::GetRow($card.Resources.Host) -eq 3) 'Bottom placement did not restore the footer.'
             Assert-Resource ($card.Resources.Host.IsVisible -and $card.Resources.Panel.Orientation -eq 'Horizontal' -and $card.Container.ColumnDefinitions[1].Width.Value -eq 0) 'Footer should reclaim the resource column and retain all readings.'
             foreach ($item in $card.Resources.Items) { Assert-Resource ($item.IsVisible -and $item.ActualHeight -gt 0) 'A footer value disappeared while shrinking.' }
+            # Verify the actual left edge in roomy and scaled footers, including label-free sizes.
+            $left=$card.Resources.Cells[0].TranslatePoint([Windows.Point]::new(0,0),$card.Resources.Host).X
+            Assert-Resource ($left -ge -0.1 -and $left -le 3.1) 'Footer hardware group should start at the left edge.'
         }
     }
 }

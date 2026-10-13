@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.8.5 — October 13, 2026
+
+- Left-align the bottom CPU/RAM/GPU strip, retaining its left edge when labels disappear or the values scale down.
+
 ## 2.8.4 — October 13, 2026
 
 - Move local Codex and Claude hardware monitoring switches to General and replace their separate placement selectors with one common Automatic/Side column/Bottom bar choice.
