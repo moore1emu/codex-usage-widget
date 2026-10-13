@@ -231,20 +231,26 @@ function Render-AccountCard {
     }
     # Every enabled resource group has a persistent column; connected panels reserve equal quota widths.
     $resourceKey=if ($Remote -or $SharedClaude) {''} elseif ($Claude) {'Claude'} else {'Local'}
-    $resourceWidth=if ($SharedLayout) {[double]$SharedLayout.ResourceWidth} elseif ($script:ResourceOptions[$resourceKey]) {[Math]::Min(110,$Width*0.44)} else {0}
+    $placement=Get-ResourcePlacement -Key $resourceKey -Width $Width -Height $Height
+    $bottom=$placement -eq 'Bottom bar'
+    $resourceWidth=if ($SharedLayout) {[double]$SharedLayout.ResourceWidth} elseif ($placement -eq 'Side column') {[Math]::Min(110,$Width*0.44)} else {0}
+    # Reserve identical quota space across connected panels, including mixed footer/column preferences.
+    $resourceHeight=if ($SharedLayout) {[double]$SharedLayout.ResourceHeight} elseif ($bottom) {[Math]::Min(22,$Height*0.18)} else {0}
     $Card.Container.ColumnDefinitions[1].Width=[Windows.GridLength]::new($resourceWidth)
-    $Card.Container.RowDefinitions[3].Height=[Windows.GridLength]::new(0)
-    [Windows.Controls.Grid]::SetColumn($Card.Resources.Host,1)
-    [Windows.Controls.Grid]::SetRow($Card.Resources.Host,1)
+    $Card.Container.RowDefinitions[3].Height=[Windows.GridLength]::new($resourceHeight)
+    [Windows.Controls.Grid]::SetColumn($Card.Resources.Host,$(if ($bottom) {0} else {1}))
+    [Windows.Controls.Grid]::SetColumnSpan($Card.Resources.Host,$(if ($bottom) {2} else {1}))
+    [Windows.Controls.Grid]::SetRow($Card.Resources.Host,$(if ($bottom) {3} else {1}))
+    $Card.ResourcePlacement=$placement
     # Bind cloned controls in this invocation's scope so existing rendering code can be reused safely.
     foreach ($key in $Card.Bindings.Keys) { Set-Variable -Name $key -Value $Card.Bindings[$key] }
-    $window = [pscustomobject]@{ ActualWidth=([Math]::Max(1,$Width-$resourceWidth)); ActualHeight=$Height; BarHeight=$BarHeight; Topmost=$true }
+    $window = [pscustomobject]@{ ActualWidth=([Math]::Max(1,$Width-$resourceWidth)); ActualHeight=([Math]::Max(1,$Height-$resourceHeight)); BarHeight=([Math]::Max(1,$BarHeight-$resourceHeight)); Topmost=$true }
     $original = @{ FullResetHeight=$script:FullResetHeight; SharedAccountLayout=$script:SharedAccountLayout; ProbingAccountLayout=$script:ProbingAccountLayout; RenderingAccountName=$script:RenderingAccountName; ReserveCreditRow=$script:ReserveCreditRow; Usage=$script:Usage; CreditsVisible=$script:CreditsVisible; RefreshError=$script:RefreshError; RenderingAccountCard=$script:RenderingAccountCard;CreditDisplayMode=$script:CreditDisplayMode;PrimaryResetHours=$script:PrimaryResetHours;ShowWeeklyResetDate=$script:ShowWeeklyResetDate }
     try {
         # Isolate the synchronous render context; timers and alerts always retain the local snapshot.
         $script:RenderingAccountCard = $true
         # Keep GPU on a credit track even when this account has no balance.
-        $script:ReserveCreditRow = [bool]$ReserveCreditRow -or [bool]$script:ResourceOptions[$resourceKey]
+        $script:ReserveCreditRow = [bool]$ReserveCreditRow -or ($placement -eq 'Side column')
         # Measure connected columns first, then apply the same fit decisions to every account.
         $script:SharedAccountLayout = $SharedLayout
         $script:ProbingAccountLayout = [bool]$ProbeLayout
@@ -271,6 +277,8 @@ function Render-AccountCard {
         foreach ($control in @($creditsText,$compactCreditsText)) { $control.Foreground = $colors[2] }
         # Restore original children before measuring another width or height.
         Restore-CompactAccountRows $Card
+        # Reset footer-only mini scaling before the normal responsive measurements run again.
+        $ultraCompactPanel.Child.LayoutTransform=[Windows.Media.Transform]::Identity
         Update-Display
         Show-CompactAccountRows -Card $Card -Width $window.ActualWidth -Height $window.ActualHeight -Colors $colors
         # Hardware labels follow the same stage as the account's 5-hour label or caption.
@@ -280,9 +288,20 @@ function Render-AccountCard {
             $quotaLabels=$inlineUsagePanel.Child.Children[1].Visibility -eq 'Visible'
             $resourceFont=$inlineUsagePanel.Child.Children[2].FontSize
         }
-        [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $Height -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -Colors $colors -SharedLayout $SharedLayout -ProbeLayout:$ProbeLayout -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
+        if ($bottom) {
+            # A persistent footer keeps all three readings on one line, reclaiming the side-column width.
+            [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $Width -Height $resourceHeight -HideLabels:(-not $quotaLabels) -FontSize 11 -Colors $colors -SingleLine)
+            if ($ultraCompactPanel.Visibility -eq 'Visible') {
+                # Scale a tiny numeric group to the remaining quota space instead of clipping values above the footer.
+                $grid=$ultraCompactPanel.Child; $grid.Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
+                $scale=[Math]::Min(1,[Math]::Max(0.1,($window.ActualHeight-12)/[Math]::Max(1,$grid.DesiredSize.Height)))
+                $grid.LayoutTransform=[Windows.Media.ScaleTransform]::new($scale,$scale)
+            }
+        } else {
+            [void](Update-ResourceRow -Row $Card.Resources -Key $resourceKey -Width $resourceWidth -Height $window.ActualHeight -HideLabels:(-not $quotaLabels) -FontSize $resourceFont -Colors $colors -SharedLayout $SharedLayout -ProbeLayout:$ProbeLayout -SingleLine:($inlineUsagePanel.Visibility -eq 'Visible'))
+        }
         # Match CPU/RAM/GPU to the quota tracks instead of centering them as an unrelated cluster.
-        if ($Card.Resources.Host.Visibility -eq 'Visible' -and $inlineUsagePanel.Visibility -ne 'Visible') { Enable-AlignedResourceRows $Card.Resources }
+        if (-not $bottom -and $Card.Resources.Host.Visibility -eq 'Visible' -and $inlineUsagePanel.Visibility -ne 'Visible') { Enable-AlignedResourceRows $Card.Resources }
         # Keep account borders and actions in the shared window instead of duplicating them.
         $outerBorder.BorderThickness = [Windows.Thickness]::new(0)
     }
@@ -385,13 +404,19 @@ function Update-AccountViews {
         }
     }
     # Reserve the GPU/credit track across connected cards without displaying a missing balance.
-    if (('Local' -in $keys -and $script:ResourceOptions.Local) -or ('Claude' -in $keys -and $script:ResourceOptions.Claude)) { $reserveCredits=$true }
+    $resourceCardWidth=if ($script:AccountLayout -eq 'Side by side') {($width-($keys.Count-1))/[Math]::Max(1,$keys.Count)} else {$width}
+    $resourceCardHeight=if ($script:AccountLayout -in @('Stacked','Separate windows')) {($height-($keys.Count-1))/[Math]::Max(1,$keys.Count)} else {$height}
+    $resourceHeading=if ($keys.Count) {Set-AccountHeadingSize -Card $script:AccountCards[$keys[0]] -Width $resourceCardWidth -Height $resourceCardHeight} else {0}
+    $resourceBodyHeight=[Math]::Max(1,$resourceCardHeight-$resourceHeading)
+    $placements=@($keys | ForEach-Object {Get-ResourcePlacement -Key $_ -Width $resourceCardWidth -Height $resourceBodyHeight})
+    if ('Side column' -in $placements) { $reserveCredits=$true }
     # Keep the existing connected quota measurements and reserve hardware width independently of size.
     $sharedLayout = if ($script:AccountLayout -in @('Side by side','Stacked') -and $keys.Count -gt 1) {
-        $resourceEnabled=('Local' -in $keys -and $script:ResourceOptions.Local) -or ('Claude' -in $keys -and $script:ResourceOptions.Claude)
+        $resourceEnabled='Side column' -in $placements
         $resourceCardWidth=if ($script:AccountLayout -eq 'Side by side') {($width-($keys.Count-1))/$keys.Count} else {$width}
         $resourceWidth=if ($resourceEnabled) {[Math]::Min(110,$resourceCardWidth*0.44)} else {0}
-        @{ResourceWidth=$resourceWidth;Widths=@{};Labels=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
+        $resourceHeight=if ('Bottom bar' -in $placements) {[Math]::Min(22,$resourceBodyHeight*0.18)} else {0}
+        @{ResourceHeight=$resourceHeight;ResourceWidth=$resourceWidth;Widths=@{};Labels=@{};Values=@{};ResetHeights=@{};NumberSize=20;ResetWidth=0;TickerPossible=$true;TickerFontSize=20;InlineWidths=@{}}
     } else { $null }
     $passes = if ($sharedLayout) { @('Measure','Apply') } else { @('Apply') }
     foreach ($pass in $passes) {

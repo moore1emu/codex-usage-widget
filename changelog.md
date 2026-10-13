@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.8.3 — October 13, 2026
+
+- Add per-account Automatic, Side column and Bottom bar hardware placement, saved locally and applied without closing Settings. Existing installations retain their side column until changed.
+- Keep native dropdown tests away from pointer hover and cover both new placement selectors.
+- Restore the persistent CPU/RAM/GPU footer, keeping values together while shrinking; Automatic selects a footer for roomy panels and a side column for compact shapes. Reserve matching quota space across connected panels, including mixed placements.
+
 ## 2.8.2 — October 13, 2026
 
 - Name the Windows sign-in shortcut AI Usage Widget and migrate matching older Codex Usage Widget shortcuts without duplicates. Preserve unrelated startup entries, and keep automatic shortcut-update failures from blocking the widget itself.

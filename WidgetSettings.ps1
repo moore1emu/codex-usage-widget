@@ -425,6 +425,11 @@ function Show-WidgetSettings {
         $check.Checked=$script:ResourceOptions[$entry.Key]; $controls[$entry.Key+'Resources']=$check
         $settingsToolTip.SetToolTip($check,'Local desktop app and child processes, sampled every 3 seconds while visible. Never shared through JSON.')
         Add-SettingsRow $tables[$entry.Tab] '' $check
+        # Keep placement independent for Codex and Claude, alongside each local monitoring switch.
+        $placement=New-SettingsChoice @('Automatic','Side column','Bottom bar') $script:ResourcePlacements[$entry.Key]
+        $controls[$entry.Key+'ResourcePlacement']=$placement
+        Add-SettingsRow $tables[$entry.Tab] 'Hardware placement' $placement
+        Set-SettingsHelp $settingsToolTip $placement 'Automatic uses a bottom bar in roomy panels and a side column in compact panels. Side column keeps row alignment. Bottom bar keeps all three readings beneath usage. Names disappear before values in tight space.'
     }
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
@@ -461,7 +466,10 @@ function Show-WidgetSettings {
         $script:SharedClaudeOptions.ResetAlert=$controls.SharedClaudeResetAlert.Checked
         $script:LocalEnabled=$controls.LocalEnabled.Checked
         # Commit resource switches only through Apply or Save, preserving Cancel behavior.
-        foreach ($key in @('Local','Claude')) { $script:ResourceOptions[$key]=$controls[$key+'Resources'].Checked }
+        foreach ($key in @('Local','Claude')) {
+            $script:ResourceOptions[$key]=$controls[$key+'Resources'].Checked
+            $script:ResourcePlacements[$key]=[string]$controls[$key+'ResourcePlacement'].SelectedItem
+        }
         Invoke-ResourceTick
         $script:ClaudeOptions.Enabled=$controls.ClaudeEnabled.Checked
         $claudeName=($controls.ClaudeName.Text -replace '[\p{C}]','').Trim()

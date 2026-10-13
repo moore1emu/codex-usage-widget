@@ -9,11 +9,17 @@ $settings=$settings.Replace('[Windows.Threading.Dispatcher]::PushFrame($settings
 if (($tabs.TabPages.Text -join ',') -ne 'General,Codex,Shared Codex,Claude,Shared Claude') { throw 'Provider tabs were not labeled consistently.' }
 $dropdownTimer=[Windows.Forms.Timer]::new()
 $dropdownTimer.Interval=1400
+# Keep native test popups away from a stationary pointer, which can highlight an uncommitted item.
+$pointer=[Windows.Forms.Cursor]::Position
+$area=[Windows.Forms.Screen]::FromPoint($pointer).WorkingArea
+$testLeft=if ($pointer.X -lt ($area.Left+$area.Width/2)) {$area.Right-$dialog.Width-10} else {$area.Left+10}
+$dialog.StartPosition='Manual'
+$dialog.Location=[Drawing.Point]::new([Math]::Max($area.Left,$testLeft),$area.Top+10)
 # Unlock draft-only Claude choices without enabling a live connection or applying settings.
 $controls.ClaudeEnabled.Checked=$true;$controls.ClaudePlacement.SelectedItem='Separate window'
 $controls.SharedClaudeEnabled.Checked=$true;$controls.SharedClaudeReadEnabled.Checked=$true;$controls.SharedClaudeWriteEnabled.Checked=$true
 $controls.SharedClaudePlacement.SelectedItem='Separate window'
-$script:DropdownChoices=@('DefaultRefresh','DefaultCredits','Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval')
+$script:DropdownChoices=@('DefaultRefresh','DefaultCredits','Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval','LocalResourcePlacement','ClaudeResourcePlacement')
 $script:DropdownIndex=0
 $script:OpenDropdownKey=$null
 $dropdownTimer.Add_Tick({
