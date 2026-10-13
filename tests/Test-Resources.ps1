@@ -142,7 +142,7 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
     }
 }
 # Restore a horizontal footer at every size and keep connected quota spacing consistent.
-$script:ResourcePlacements.Local='Bottom bar'; $script:ResourcePlacements.Claude='Bottom bar'
+$script:ResourcePlacement='Bottom bar'
 foreach ($layout in @('Side by side','Stacked','Account picker')) {
     $script:AccountLayout=$layout
     foreach ($size in @(@(600,600),@(300,240),@(150,144),@(600,70))) {
@@ -156,16 +156,16 @@ foreach ($layout in @('Side by side','Stacked','Account picker')) {
         }
     }
 }
-# Automatic placement follows each actual account panel, while mixed placements reserve matching quota space.
-$script:AccountLayout='Stacked'; $script:ResourcePlacements.Local='Automatic'; $script:ResourcePlacements.Claude='Automatic'
+# Automatic placement follows each actual account panel, with one placement governing both local accounts.
+$script:AccountLayout='Stacked'; $script:ResourcePlacement='Automatic'
 $window.Width=600; $window.Height=600; Wait-TestDispatcher 30; Update-Display
 Assert-Resource ($script:AccountCards.Local.ResourcePlacement -eq 'Bottom bar') 'Automatic should use a footer in a roomy panel.'
 $window.Width=150; $window.Height=144; Wait-TestDispatcher 30; Update-Display
 Assert-Resource ($script:AccountCards.Local.ResourcePlacement -eq 'Side column') 'Automatic should retain columns in compact panels.'
-$script:ResourcePlacements.Local='Bottom bar'; $script:ResourcePlacements.Claude='Side column'
-$window.Width=600; $window.Height=600; Wait-TestDispatcher 30; Update-Display; $window.UpdateLayout()
-Assert-Resource ($script:AccountCards.Local.Container.ColumnDefinitions[1].Width.Value -eq $script:AccountCards.Claude.Container.ColumnDefinitions[1].Width.Value -and $script:AccountCards.Local.Container.RowDefinitions[3].Height.Value -eq $script:AccountCards.Claude.Container.RowDefinitions[3].Height.Value) 'Mixed placements should reserve matching quota width and height.'
-$script:ResourcePlacements.Local='Side column'; $script:ResourcePlacements.Claude='Side column'
+# A single choice governs both local accounts.
+$script:ResourcePlacement='Bottom bar'; Update-Display
+Assert-Resource ($script:AccountCards.Local.ResourcePlacement -eq 'Bottom bar' -and $script:AccountCards.Claude.ResourcePlacement -eq 'Bottom bar') 'The common placement did not apply to both accounts.'
+$script:ResourcePlacement='Side column'
 # Detached Claude uses the same persistent column even at its mini size.
 $script:ClaudeOptions.Placement='Separate window'; Update-Display; Wait-TestDispatcher 50
 $script:ClaudeView.Window.Width=72; $script:ClaudeView.Window.Height=72
@@ -188,23 +188,31 @@ $window.Width=72; $window.Height=72; Wait-TestDispatcher 50; Update-Display
 Assert-Resource ($script:AccountCards.Local.Resources.Host.Visibility -eq 'Visible' -and $script:AccountCards.Local.Resources.Panel.Orientation -eq 'Vertical') 'Single-account mini view must retain hardware values in three rows.'
 Save-WidgetState
 $saved=Get-Content -LiteralPath (Join-Path $script:TestState 'widget-state.json') -Raw | ConvertFrom-Json
-Assert-Resource ($saved.resourceOptions.Local -eq $true -and $saved.resourcePlacements.Local -eq 'Side column') 'Resource switches and placement should persist locally.'
+Assert-Resource ($saved.resourceOptions.Local -eq $true -and $saved.resourcePlacement -eq 'Side column') 'Resource switches and placement should persist locally.'
 # Check migration and real settings Apply/Cancel without contacting either account service.
 $script:ResourceOptions.Local=$false
 Restore-ClaudeSettings $saved
 Assert-Resource $script:ResourceOptions.Local 'Restart should restore the local resource switch.'
+Assert-Resource ($script:ResourcePlacement -eq 'Side column') 'Restart should restore the common placement.'
+Restore-ClaudeSettings @{resourceOptions=@{Local=$true;Claude=$true};resourcePlacements=@{Local='Bottom bar';Claude='Side column'}}
+Assert-Resource ($script:ResourcePlacement -eq 'Bottom bar') 'Upgrade should prefer the monitored Codex placement when both accounts differ.'
+Restore-ClaudeSettings @{localEnabled=$false;resourceOptions=@{Local=$false;Claude=$true};resourcePlacements=@{Local='Side column';Claude='Automatic'}}
+Assert-Resource ($script:ResourcePlacement -eq 'Automatic') 'Claude-only upgrade should retain its active placement.'
+Restore-ClaudeSettings $saved
+
 $settings=[IO.File]::ReadAllText((Join-Path $script:TestProject 'WidgetSettings.ps1'))
 $settings=$settings.Replace('$dialog.Show()',@'
         $dialog.Show()
         try {
             $controls.LocalResources.Checked=$false; $controls.ClaudeResources.Checked=$true
-            $controls.LocalResourcePlacement.SelectedItem='Bottom bar'; $controls.ClaudeResourcePlacement.SelectedItem='Automatic'
+            Assert-Resource ($controls.LocalResources.Parent -eq $tables.Defaults -and $controls.ClaudeResources.Parent -eq $tables.Defaults -and $controls.ResourcePlacement.Parent -eq $tables.Defaults) 'Hardware controls should all live on General.'
+            $controls.ResourcePlacement.SelectedItem='Bottom bar'
             & $applySettings
-            Assert-Resource (-not $script:ResourceOptions.Local -and $script:ResourceOptions.Claude -and $script:ResourcePlacements.Local -eq 'Bottom bar' -and $script:ResourcePlacements.Claude -eq 'Automatic') 'Apply should commit independent resource switches and placements.'
+            Assert-Resource (-not $script:ResourceOptions.Local -and $script:ResourceOptions.Claude -and $script:ResourcePlacement -eq 'Bottom bar') 'Apply should commit independent resource switches and placements.'
             $controls.LocalResources.Checked=$true; $controls.ClaudeResources.Checked=$false
-            $controls.LocalResourcePlacement.SelectedItem='Side column'
+            $controls.ResourcePlacement.SelectedItem='Side column'
             $cancel.PerformClick()
-            Assert-Resource (-not $script:ResourceOptions.Local -and $script:ResourceOptions.Claude -and $script:ResourcePlacements.Local -eq 'Bottom bar') 'Cancel should discard uncommitted switches and placement.'
+            Assert-Resource (-not $script:ResourceOptions.Local -and $script:ResourceOptions.Claude -and $script:ResourcePlacement -eq 'Bottom bar') 'Cancel should discard uncommitted switches and placement.'
         } finally { $dialog.Close() }
 '@)
 Invoke-Expression $settings

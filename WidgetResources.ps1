@@ -1,7 +1,7 @@
 # Keep resource preferences and readings local; quota exports deliberately omit them.
 $script:ResourceOptions = @{ Local=$false; Claude=$false }
-# Preserve the current column until an account's placement is explicitly changed.
-$script:ResourcePlacements = @{ Local='Side column'; Claude='Side column' }
+# Keep one shared hardware placement, with independent local monitoring switches.
+$script:ResourcePlacement = 'Side column'
 $script:ResourceReadings = @{}
 $script:ResourceNextSample = [DateTimeOffset]::MinValue
 
@@ -9,7 +9,7 @@ function Get-ResourcePlacement {
     param([string]$Key,[double]$Width,[double]$Height)
     # Imported accounts never acquire local hardware readings or a placement preference.
     if (-not $script:ResourceOptions[$Key]) { return 'Off' }
-    $choice=$script:ResourcePlacements[$Key]
+    $choice=$script:ResourcePlacement
     if ($choice -eq 'Automatic') {
         # Use a footer when a roomy panel can carry a readable strip, retaining columns in compact shapes.
         return $(if ($Width -ge 240 -and $Height -ge 140) {'Bottom bar'} else {'Side column'})

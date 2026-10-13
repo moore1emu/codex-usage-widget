@@ -419,18 +419,17 @@ function Show-WidgetSettings {
     $masterManagedControls=[Collections.Generic.HashSet[Windows.Forms.Control]]::new($defaultManagedControls)
     foreach ($key in @('SharedEnabled','SharedLock','Name','ClaudeEnabled','ClaudeStatus','ClaudeConnect','ClaudeSize','SharedClaudeEnabled','SharedClaudeStatus','SharedClaudeName')) { [void]$masterManagedControls.Add($controls[$key]) }
     foreach ($kind in @('Read','Write')) { foreach ($suffix in @('Path','Browse','Interval')) { [void]$masterManagedControls.Add($controls['SharedClaude'+$kind+$suffix]);[void]$masterManagedControls.Add($controls[$kind+$suffix]) } }
-    # Independent local switches avoid sampling disabled desktop apps or exporting hardware values.
-    foreach ($entry in @(@{Key='Local';Tab='General'},@{Key='Claude';Tab='Claude'})) {
-        $check=[Windows.Forms.CheckBox]::new(); $check.Text='Show local CPU / RAM / GPU'; $check.AutoSize=$true
+    # Put machine-wide hardware controls on General, keeping the two local app switches independent.
+    foreach ($entry in @(@{Key='Local';Name='Codex'},@{Key='Claude';Name='Claude'})) {
+        $check=[Windows.Forms.CheckBox]::new(); $check.Text='Show local '+$entry.Name+' CPU / RAM / GPU'; $check.AutoSize=$true
         $check.Checked=$script:ResourceOptions[$entry.Key]; $controls[$entry.Key+'Resources']=$check
-        $settingsToolTip.SetToolTip($check,'Local desktop app and child processes, sampled every 3 seconds while visible. Never shared through JSON.')
-        Add-SettingsRow $tables[$entry.Tab] '' $check
-        # Keep placement independent for Codex and Claude, alongside each local monitoring switch.
-        $placement=New-SettingsChoice @('Automatic','Side column','Bottom bar') $script:ResourcePlacements[$entry.Key]
-        $controls[$entry.Key+'ResourcePlacement']=$placement
-        Add-SettingsRow $tables[$entry.Tab] 'Hardware placement' $placement
-        Set-SettingsHelp $settingsToolTip $placement 'Automatic uses a bottom bar in roomy panels and a side column in compact panels. Side column keeps row alignment. Bottom bar keeps all three readings beneath usage. Names disappear before values in tight space.'
+        $settingsToolTip.SetToolTip($check,'Local desktop app and child processes, sampled every 3 seconds while visible. The account must also be enabled. Never shared through JSON.')
+        Add-SettingsRow $tables.Defaults '' $check
     }
+    # One placement applies to both accounts, including their separate windows.
+    $controls.ResourcePlacement=New-SettingsChoice @('Automatic','Side column','Bottom bar') $script:ResourcePlacement
+    Add-SettingsRow $tables.Defaults 'Hardware placement' $controls.ResourcePlacement
+    Set-SettingsHelp $settingsToolTip $controls.ResourcePlacement 'Applies to local Codex and Claude. Automatic uses a bottom bar in roomy panels and a side column in compact panels. Side column keeps row alignment. Bottom bar keeps all three readings beneath usage.'
     # Apply and Save share validation, live updates, and persistence.
     $applySettings = {
         # Validate Claude sharing paths before applying any draft account switches.
@@ -468,8 +467,8 @@ function Show-WidgetSettings {
         # Commit resource switches only through Apply or Save, preserving Cancel behavior.
         foreach ($key in @('Local','Claude')) {
             $script:ResourceOptions[$key]=$controls[$key+'Resources'].Checked
-            $script:ResourcePlacements[$key]=[string]$controls[$key+'ResourcePlacement'].SelectedItem
         }
+        $script:ResourcePlacement=[string]$controls.ResourcePlacement.SelectedItem
         Invoke-ResourceTick
         $script:ClaudeOptions.Enabled=$controls.ClaudeEnabled.Checked
         $claudeName=($controls.ClaudeName.Text -replace '[\p{C}]','').Trim()

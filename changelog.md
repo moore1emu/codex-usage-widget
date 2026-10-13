@@ -2,6 +2,11 @@
 
 [Back to README](README.md)
 
+## 2.8.4 — October 13, 2026
+
+- Move local Codex and Claude hardware monitoring switches to General and replace their separate placement selectors with one common Automatic/Side column/Bottom bar choice.
+- Keep monitoring independent and preserve Apply/Cancel and restart behavior. Migrate older placement choices from monitored Codex, or Claude when Codex monitoring is inactive.
+
 ## 2.8.3 — October 13, 2026
 
 - Add per-account Automatic, Side column and Bottom bar hardware placement, saved locally and applied without closing Settings. Existing installations retain their side column until changed.

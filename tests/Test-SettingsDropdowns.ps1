@@ -19,7 +19,7 @@ $dialog.Location=[Drawing.Point]::new([Math]::Max($area.Left,$testLeft),$area.To
 $controls.ClaudeEnabled.Checked=$true;$controls.ClaudePlacement.SelectedItem='Separate window'
 $controls.SharedClaudeEnabled.Checked=$true;$controls.SharedClaudeReadEnabled.Checked=$true;$controls.SharedClaudeWriteEnabled.Checked=$true
 $controls.SharedClaudePlacement.SelectedItem='Separate window'
-$script:DropdownChoices=@('DefaultRefresh','DefaultCredits','Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval','LocalResourcePlacement','ClaudeResourcePlacement')
+$script:DropdownChoices=@('DefaultRefresh','DefaultCredits','Refresh','Size','Position','LocalScheme','Credits','Layout','RemoteScheme','WriteInterval','ReadInterval','Account','ClaudePlacement','ClaudeSize','ClaudeScheme','ClaudeInterval','SharedClaudePlacement','SharedClaudeSize','SharedClaudeScheme','SharedClaudeReadInterval','SharedClaudeWriteInterval','ResourcePlacement')
 $script:DropdownIndex=0
 $script:OpenDropdownKey=$null
 $dropdownTimer.Add_Tick({

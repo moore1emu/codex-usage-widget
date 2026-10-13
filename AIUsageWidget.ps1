@@ -16,7 +16,7 @@ trap {
     exit 1
 }
 # Bump this version and the separate changelog together for each released update.
-$script:WidgetVersion = '2.8.3'
+$script:WidgetVersion = '2.8.4'
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 # Use Windows' app color preference for native menus and settings before creating controls.
@@ -835,7 +835,7 @@ function Save-WidgetState {
         # Store account enable switches and Claude options locally, never in shared usage JSON.
         localEnabled = $script:LocalEnabled
         resourceOptions = $script:ResourceOptions
-        resourcePlacements = $script:ResourcePlacements
+        resourcePlacement = $script:ResourcePlacement
         claude = $script:ClaudeOptions
         sharedClaude = $script:SharedClaudeOptions
         primaryColor = $script:PrimaryColor

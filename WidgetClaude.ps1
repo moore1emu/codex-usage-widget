@@ -108,7 +108,15 @@ function Restore-ClaudeSettings {
     # Restore local resource switches without adding them to shared account exports.
     foreach ($key in @('Local','Claude')) {
         if ($State.resourceOptions.$key -is [bool]) { $script:ResourceOptions[$key]=$State.resourceOptions.$key }
-        if ($State.resourcePlacements.$key -in @('Automatic','Side column','Bottom bar')) { $script:ResourcePlacements[$key]=$State.resourcePlacements.$key }
+    }
+    # Restore the common placement; migrate an enabled account's former per-account choice once.
+    if ($State.resourcePlacement -in @('Automatic','Side column','Bottom bar')) { $script:ResourcePlacement=$State.resourcePlacement }
+    else {
+        $preferred=if (-not ($script:ResourceOptions.Local -and $script:LocalEnabled) -and $script:ResourceOptions.Claude) {'Claude'} else {'Local'}
+        $other=if ($preferred -eq 'Local') {'Claude'} else {'Local'}
+        foreach ($key in @($preferred,$other)) {
+            if ($State.resourcePlacements.$key -in @('Automatic','Side column','Bottom bar')) { $script:ResourcePlacement=$State.resourcePlacements.$key; break }
+        }
     }
     $saved = $State.claude
     if (-not $saved) { return }
