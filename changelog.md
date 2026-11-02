@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.8.6 — November 2, 2026
+
+- Identify Codex 5-hour and weekly limits by their reported duration, fixing weekly-only Pro accounts whose weekly allowance arrives in the primary API slot. An absent 5-hour limit remains unavailable instead of appearing as 100%.
+
 ## 2.8.5 — October 13, 2026
 
 - Left-align the bottom CPU/RAM/GPU strip, retaining its left edge when labels disappear or the values scale down.

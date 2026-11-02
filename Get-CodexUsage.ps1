@@ -66,7 +66,7 @@ try {
             clientInfo = @{
                 name = 'codex-usage-widget'
                 title = 'AI Usage Widget'
-                version = '2.8.5'
+                version = '2.8.6'
             }
             capabilities = @{
                 experimentalApi = $true
@@ -127,6 +127,22 @@ try {
         throw 'No Codex usage window is available for this account.'
     }
 
+    # Keep: API slot order is not a duration guarantee; weekly-only Pro uses primary (2.8.6).
+    $primaryWindow = $null
+    $secondaryWindow = $null
+    foreach ($slot in @('primary','secondary')) {
+        $quota = $snapshot.$slot
+        if (-not $quota) { continue }
+        # Map known durations to the widget tracks, preserving legacy slots for other durations.
+        $target = switch ([int]$quota.windowDurationMins) {
+            300 { 'primary' }
+            10080 { 'secondary' }
+            default { $slot }
+        }
+        if ($target -eq 'primary') { $primaryWindow = $quota }
+        else { $secondaryWindow = $quota }
+    }
+
     # Preserve server usage values; the display converts them to percentages left.
     [ordered]@{
         fetchedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -134,20 +150,20 @@ try {
         ordinaryUsageAllowed = [bool] $response.result.ordinaryUsageAllowed
         # Preserve credit availability and the reported balance, including null values.
         credits = $snapshot.credits
-        primary = if ($snapshot.primary) {
+        primary = if ($primaryWindow) {
             [ordered]@{
                 # Preserve unknown percentages so the UI cannot mistake them for full quota.
-                usedPercent = if ($null -ne $snapshot.primary.usedPercent) { [double] $snapshot.primary.usedPercent } else { $null }
-                windowDurationMins = [int] $snapshot.primary.windowDurationMins
-                resetsAt = [long] $snapshot.primary.resetsAt
+                usedPercent = if ($null -ne $primaryWindow.usedPercent) { [double] $primaryWindow.usedPercent } else { $null }
+                windowDurationMins = [int] $primaryWindow.windowDurationMins
+                resetsAt = [long] $primaryWindow.resetsAt
             }
         } else { $null }
-        secondary = if ($snapshot.secondary) {
+        secondary = if ($secondaryWindow) {
             [ordered]@{
                 # Preserve unknown percentages independently for the weekly window.
-                usedPercent = if ($null -ne $snapshot.secondary.usedPercent) { [double] $snapshot.secondary.usedPercent } else { $null }
-                windowDurationMins = [int] $snapshot.secondary.windowDurationMins
-                resetsAt = [long] $snapshot.secondary.resetsAt
+                usedPercent = if ($null -ne $secondaryWindow.usedPercent) { [double] $secondaryWindow.usedPercent } else { $null }
+                windowDurationMins = [int] $secondaryWindow.windowDurationMins
+                resetsAt = [long] $secondaryWindow.resetsAt
             }
         } else { $null }
     } | ConvertTo-Json -Compress -Depth 5
