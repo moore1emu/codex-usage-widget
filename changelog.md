@@ -2,6 +2,12 @@
 
 [Back to README](README.md)
 
+## 2.8.7 — November 18, 2026
+
+- Keep the hidden Claude reader on a small claude.ai page and load the full Usage app only while the connection window is shown, and start its private browser without GPU acceleration. In a signed-out probe this cut the hidden browser from about 520 MB to about 90 MB committed; the widget previously held roughly 430 MB for it while signed in.
+- Reuse one background worker for CPU/RAM/GPU readings and sample every 15 seconds instead of every 3. Creating a new PowerShell runspace per sample let the widget's own memory grow from about 280 MB to 530 MB over six days.
+- Verified with the regression runner and a signed-out WebView2 probe; the owner confirmed signed-in refreshes after restarting, when the widget measured about 320 MB committed in total, down from about 960 MB.
+
 ## 2.8.6 — November 2, 2026
 
 - Identify Codex 5-hour and weekly limits by their reported duration, fixing weekly-only Pro accounts whose weekly allowance arrives in the primary API slot. An absent 5-hour limit remains unavailable instead of appearing as 100%.

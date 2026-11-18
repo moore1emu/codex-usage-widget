@@ -4,6 +4,9 @@ $script:ResourceOptions = @{ Local=$false; Claude=$false }
 $script:ResourcePlacement = 'Side column'
 $script:ResourceReadings = @{}
 $script:ResourceNextSample = [DateTimeOffset]::MinValue
+# Keep: hardware readings refresh every 15 seconds; WMI process/GPU queries are too costly to repeat every few seconds (2.8.7).
+$script:ResourceSampleSeconds = 15
+$script:ResourceRunspace = $null
 
 function Get-ResourcePlacement {
     param([string]$Key,[double]$Width,[double]$Height)
@@ -232,6 +235,23 @@ function Stop-ResourceSampling {
         $script:ResourceWorker.Stop(); $script:ResourceWorker.Dispose()
         $script:ResourceWorker=$null; $script:ResourceOperation=$null
     }
+    # Release the reusable worker runspace while readings are not displayed.
+    if ($script:ResourceRunspace) { $script:ResourceRunspace.Dispose(); $script:ResourceRunspace=$null }
+    # Sample immediately when shown again rather than waiting out the 15-second interval.
+    $script:ResourceNextSample=[DateTimeOffset]::MinValue
+}
+
+function Get-ResourceRunspace {
+    # Keep: reuse one background runspace; creating one per sample reloaded CIM cmdlets each time and the widget's memory grew over days (2.8.7).
+    if ($script:ResourceRunspace -and $script:ResourceRunspace.RunspaceStateInfo.State -eq 'Opened') { return $script:ResourceRunspace }
+    if ($script:ResourceRunspace) { $script:ResourceRunspace.Dispose() }
+    $script:ResourceRunspace=[runspacefactory]::CreateRunspace()
+    $script:ResourceRunspace.Open()
+    # Define the sampler once in the worker instead of resending its source with every sample.
+    $setup=[PowerShell]::Create(); $setup.Runspace=$script:ResourceRunspace
+    try { [void]$setup.AddScript("function Get-AppResourceSnapshot {`n$(${function:Get-AppResourceSnapshot})`n}").Invoke() }
+    finally { $setup.Dispose() }
+    return $script:ResourceRunspace
 }
 
 function Invoke-ResourceTick {
@@ -248,9 +268,10 @@ function Invoke-ResourceTick {
     $visible=$window.IsVisible -or ($script:ClaudeView -and $script:ClaudeView.Window.IsVisible)
     if (-not $wanted -or -not $visible) { Stop-ResourceSampling; return }
     if ($script:ResourceWorker -or [DateTimeOffset]::Now -lt $script:ResourceNextSample) { return }
-    # Isolate slow Windows counters in one reusable PowerShell worker per sample.
-    $script:ResourceNextSample=[DateTimeOffset]::Now.AddSeconds(3)
+    # Isolate slow Windows counters in the reusable background runspace, one pipeline per sample.
+    $script:ResourceNextSample=[DateTimeOffset]::Now.AddSeconds($script:ResourceSampleSeconds)
     $script:ResourceWorker=[PowerShell]::Create()
-    [void]$script:ResourceWorker.AddScript(${function:Get-AppResourceSnapshot}.ToString()).AddArgument($PID).AddArgument([Diagnostics.Process]::GetCurrentProcess().SessionId)
+    $script:ResourceWorker.Runspace=Get-ResourceRunspace
+    [void]$script:ResourceWorker.AddCommand('Get-AppResourceSnapshot').AddArgument($PID).AddArgument([Diagnostics.Process]::GetCurrentProcess().SessionId)
     $script:ResourceOperation=$script:ResourceWorker.BeginInvoke()
 }

@@ -220,5 +220,12 @@ $settings=$settings.Replace('$dialog.Show()',@'
 '@)
 Invoke-Expression $settings
 Show-WidgetSettings
+# Samples reuse one worker runspace with the sampler defined once, released when readings stop.
+$first=Get-ResourceRunspace; $second=Get-ResourceRunspace
+$probe=[PowerShell]::Create(); $probe.Runspace=$first
+$defined=@($probe.AddCommand('Get-Command').AddArgument('Get-AppResourceSnapshot').Invoke()).Count; $probe.Dispose()
+Assert-Resource ([object]::ReferenceEquals($first,$second) -and $defined -eq 1) 'Resource sampling should reuse one runspace with the sampler defined once.'
+Stop-ResourceSampling
+Assert-Resource ($null -eq $script:ResourceRunspace -and $script:ResourceNextSample -eq [DateTimeOffset]::MinValue) 'Stopping readings should release the worker and sample promptly when shown again.'
 Close-TestWidget
 Write-Output 'PASS: local process grouping, resource formatting, compact rows, alignment and persistence.'

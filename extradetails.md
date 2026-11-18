@@ -158,7 +158,7 @@ Settings, notification state, and startup-error diagnostics are stored in `%LOCA
 
 ## Claude subscriptions
 
-Enable **Claude** in its Settings tab, click **Apply**, then **Connect / open Claude Usage**. Sign in manually on Claude’s own website. This is a separate browser session; an existing desktop-app sign-in is not copied. Closing the connection window hides it while subscription refreshes continue. You can reopen it to change the active subscription or sign in again.
+Enable **Claude** in its Settings tab, click **Apply**, then **Connect / open Claude Usage**. Sign in manually on Claude’s own website. This is a separate browser session; an existing desktop-app sign-in is not copied. Closing the connection window hides it while subscription refreshes continue. While hidden, the browser stays on a small claude.ai page instead of the full Usage app and runs without GPU acceleration, keeping its memory low. You can reopen it to change the active subscription or sign in again.
 
 The optional connection requires the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). First use downloads a pinned Microsoft WebView2 SDK from NuGet and verifies Microsoft’s assembly signatures. SDK files, Microsoft’s license, and the private browser profile are stored under the widget’s LocalAppData directory, outside this repository and synced folders. Do not share that browser profile.
 
@@ -176,7 +176,7 @@ To show only **shared Codex and local Claude**, turn off **Enable local Codex ac
 
 ## Local desktop resource readings
 
-Enable **Show local CPU / RAM / GPU** independently in the local Codex and Claude tabs, then Apply or Save. It is off by default. Collection runs in the background every 3 seconds while a local widget window is visible, independently of quota refresh. All-hidden tray mode pauses collection.
+Enable **Show local CPU / RAM / GPU** independently in the local Codex and Claude tabs, then Apply or Save. It is off by default. Collection runs in the background every 15 seconds while a local widget window is visible, independently of quota refresh. All-hidden tray mode pauses collection.
 
 Totals include the installed desktop app and its child processes. The widget and its helpers, ChatGPT Classic, unrelated browsers and other applications are excluded. CPU is normalized across logical processors; RAM sums private working sets, avoiding shared-page double counting. GPU reports the busiest physical engine after summing that app's processes within each engine. Task Manager may use different grouping or sampling, so momentary readings can differ.
 

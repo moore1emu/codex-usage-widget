@@ -18,6 +18,20 @@ $script:ClaudeUsage = $null
 $script:ClaudeStatus = 'Not connected - use Connect in Settings'
 $script:ClaudeAlertStates = @{}
 $script:ClaudeNextRefresh = [DateTimeOffset]::MinValue
+# Keep: the hidden reader stays on a tiny same-origin page; the full Usage app (~400 MB more) loads only while its window is shown for sign-in or subscription choice (2.8.7).
+$script:ClaudeReaderUrl = 'https://claude.ai/robots.txt'
+$script:ClaudeUsageUrl = 'https://claude.ai/settings/usage'
+$script:ClaudeBrowserPage = $null
+# Keep: a hidden reader never draws, so its GPU process is unnecessary (2.8.7).
+$script:ClaudeBrowserArguments = '--disable-gpu'
+
+function Set-ClaudeBrowserPage {
+    param([string]$Url)
+    # Navigate only when the intended page changes, so show/hide cannot start duplicate refreshes.
+    if (-not $script:ClaudeBrowserReady -or $script:ClaudeBrowserPage -eq $Url) { return }
+    $script:ClaudeBrowserPage = $Url
+    $script:ClaudeBrowser.CoreWebView2.Navigate($Url)
+}
 
 function ConvertTo-ClaudeUsage {
     param($Payload)
@@ -153,7 +167,8 @@ function Start-ClaudeConnection {
     if (-not $script:ClaudeOptions.Enabled) { return }
     if ($Show) { $script:ClaudeShowConnection=$true }
     if ($script:ClaudeBrowserWindow) {
-        if ($Show) { $script:ClaudeBrowserWindow.Show(); [void]$script:ClaudeBrowserWindow.Activate() }
+        # Load the full Usage app only for the visible sign-in window.
+        if ($Show) { Set-ClaudeBrowserPage $script:ClaudeUsageUrl; $script:ClaudeBrowserWindow.Show(); [void]$script:ClaudeBrowserWindow.Activate() }
         Start-ClaudeRefresh -Force
         return
     }
@@ -180,7 +195,10 @@ function Start-ClaudeConnection {
             $script:ClaudeSdkLoaded=$true
         }
         $profile=Join-Path $script:StateDirectory 'ClaudeBrowserProfile'
-        $script:ClaudeEnvironmentTask=[Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null,$profile,$null)
+        # Start the private browser without GPU acceleration to avoid a separate GPU process.
+        $options=[Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
+        $options.AdditionalBrowserArguments=$script:ClaudeBrowserArguments
+        $script:ClaudeEnvironmentTask=[Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null,$profile,$options)
         $script:ClaudeStatus='Connecting to Claude…'
     } catch { $script:ClaudeStatus='WebView2 unavailable. Install the Microsoft Edge WebView2 Runtime and reconnect.' }
 }
@@ -199,6 +217,9 @@ function Initialize-ClaudeBrowser {
     $script:ClaudeBrowserWindow.Show()
     $script:ClaudeBrowserTask=$script:ClaudeBrowser.EnsureCoreWebView2Async($Environment)
     $script:ClaudeBrowserWindow.Add_Closing({ if (-not $script:ExitRequested -and -not $script:ClosingClaudeConnection) { $_.Cancel=$true; $script:ClaudeBrowserWindow.Hide() } })
+    # Return to the lightweight reader page whenever the sign-in window is hidden.
+    # Skip this while the browser is being closed, so no navigation starts on a disposing control.
+    $script:ClaudeBrowserWindow.Add_IsVisibleChanged({ if (-not $script:ClaudeBrowserWindow.IsVisible -and -not $script:ClosingClaudeConnection -and -not $script:ExitRequested) { Set-ClaudeBrowserPage $script:ClaudeReaderUrl } })
 }
 
 function Start-ClaudeRefresh {
@@ -312,7 +333,8 @@ function Invoke-ClaudeTick {
             $core.Add_WebMessageReceived({ param($sender,$eventArgs) Receive-ClaudeUsage $eventArgs })
             $core.Add_NavigationCompleted({ if ($script:ClaudeOptions.Enabled) { Start-ClaudeRefresh -Force } })
             $script:ClaudeBrowserReady=$true
-            $core.Navigate('https://claude.ai/settings/usage')
+            # A requested Connect shows the full Usage app; automatic reconnects stay on the reader page.
+            Set-ClaudeBrowserPage $(if ($script:ClaudeShowConnection) { $script:ClaudeUsageUrl } else { $script:ClaudeReaderUrl })
             if (-not $script:ClaudeShowConnection) { $script:ClaudeBrowserWindow.Hide() }
             $script:ClaudeBrowserWindow.Opacity=1
         }
@@ -325,7 +347,7 @@ function Invoke-ClaudeTick {
         # Discard a failed browser initialization so Connect can make a clean retry.
         $script:ClaudeStatus='Claude connection failed - use Connect in Settings'; $script:ClaudeBrowserReady=$false
         if ($script:ClaudeBrowserWindow) {$script:ClaudeBrowserWindow.Hide();$script:ClaudeBrowserWindow.Content=$null;$script:ClaudeBrowser.Dispose();$script:ClaudeBrowserWindow=$null}
-        $script:ClaudeEnvironmentTask=$null;$script:ClaudeBrowserTask=$null
+        $script:ClaudeEnvironmentTask=$null;$script:ClaudeBrowserTask=$null;$script:ClaudeBrowserPage=$null
     }
 }
 
@@ -346,7 +368,7 @@ function Update-ClaudeConnection {
         } finally {
             # Keep the private sign-in profile on disk for the next enable, but release live resources.
             $script:ClosingClaudeConnection=$false;$script:ClaudeBrowserWindow=$null;$script:ClaudeBrowser=$null
-            $script:ClaudeBrowserReady=$false;$script:ClaudeEnvironmentTask=$null;$script:ClaudeBrowserTask=$null;$script:ClaudeShowConnection=$false
+            $script:ClaudeBrowserReady=$false;$script:ClaudeEnvironmentTask=$null;$script:ClaudeBrowserTask=$null;$script:ClaudeShowConnection=$false;$script:ClaudeBrowserPage=$null
         }
         if ($script:ClaudeSetupProcess) {
             if (-not $script:ClaudeSetupProcess.HasExited) {$script:ClaudeSetupProcess.Kill($true)}

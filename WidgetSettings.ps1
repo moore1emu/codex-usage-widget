@@ -423,7 +423,7 @@ function Show-WidgetSettings {
     foreach ($entry in @(@{Key='Local';Name='Codex'},@{Key='Claude';Name='Claude'})) {
         $check=[Windows.Forms.CheckBox]::new(); $check.Text='Show local '+$entry.Name+' CPU / RAM / GPU'; $check.AutoSize=$true
         $check.Checked=$script:ResourceOptions[$entry.Key]; $controls[$entry.Key+'Resources']=$check
-        $settingsToolTip.SetToolTip($check,'Local desktop app and child processes, sampled every 3 seconds while visible. The account must also be enabled. Never shared through JSON.')
+        $settingsToolTip.SetToolTip($check,'Local desktop app and child processes, sampled every 15 seconds while visible. The account must also be enabled. Never shared through JSON.')
         Add-SettingsRow $tables.Defaults '' $check
     }
     # One placement applies to both accounts, including their separate windows.
