@@ -34,7 +34,17 @@ try {
         # Use the most recently installed executable when older builds remain on disk.
         $codex = ($candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
     }
-    # Explain how to recover when neither discovery method finds Codex.
+    # Resolve the Microsoft Store installation without relying on the desktop app's PATH.
+    if (-not $codex) {
+        $package = Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue
+        if ($package.InstallLocation) {
+            $packagedCodex = Join-Path $package.InstallLocation 'app\resources\codex.exe'
+            if (Test-Path -LiteralPath $packagedCodex -PathType Leaf) {
+                $codex = $packagedCodex
+            }
+        }
+    }
+    # Explain how to recover when the discovery methods cannot find Codex.
     if (-not $codex) {
         throw 'Codex could not be found. Install and open Codex on this computer, sign in, then restart the widget. If installed in a custom location, add the folder containing codex.exe to PATH.'
     }
@@ -66,7 +76,7 @@ try {
             clientInfo = @{
                 name = 'codex-usage-widget'
                 title = 'AI Usage Widget'
-                version = '2.8.6'
+                version = '2.8.8'
             }
             capabilities = @{
                 experimentalApi = $true
