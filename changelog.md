@@ -2,6 +2,10 @@
 
 [Back to README](README.md)
 
+## 2.8.8 — November 20, 2026
+
+- Find the Microsoft Store installation of Codex when its executable is missing from PATH.
+
 ## 2.8.7 — November 18, 2026
 
 - Keep the hidden Claude reader on a small claude.ai page and load the full Usage app only while the connection window is shown, and start its private browser without GPU acceleration. In a signed-out probe this cut the hidden browser from about 520 MB to about 90 MB committed; the widget previously held roughly 430 MB for it while signed in.
